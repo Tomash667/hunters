@@ -1,0 +1,7 @@
+﻿+ f - fire
++ camera bufer
++ l - look around
++ P - message history
++ drop/get/equip can take multiple turns
++ menu
++ save/load
