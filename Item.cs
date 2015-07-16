@@ -16,9 +16,16 @@ namespace hunters
             Other
         }
 
+        /*public enum WeaponType
+        {
+            Melee,
+            Gun
+        }*/
+
         public Type type;
         public string name;
         public int value;
+        //public int subtype;
 
         public bool IsStackable
         {

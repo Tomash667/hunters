@@ -13,7 +13,9 @@ namespace hunters
         {
             Game,
             Inventory,
-            Exit
+            Exit,
+            Look,
+            Throw
         }
 
         enum InventoryAction
@@ -24,7 +26,8 @@ namespace hunters
             Get,
             Equip,
             Remove,
-            Use
+            Use,
+            Throw
         }
 
         class InvItem
@@ -45,6 +48,14 @@ namespace hunters
         bool inv_have_number, player_acted, inv_from_game;
         List<InvItem> inv_items = new List<InvItem>();
         InventoryAction inv_action;
+
+        Pos look_pos;
+        float look_timer;
+        bool look_blink;
+
+        Item throw_prev;
+        int throw_index;
+        Unit throw_target;
 
         public void Init()
         {
@@ -77,6 +88,10 @@ namespace hunters
             units.Add(ai);
 
             AddText("Welcome Tomashu! Press ? for controls.");
+
+            // reset on new game/load
+            throw_prev = null;
+            throw_target = null;
         }
 
         public bool HandleQuitDialog()
@@ -135,22 +150,6 @@ namespace hunters
             AddText(s);
         }
 
-        void BuildInventory()
-        {
-            inv_items.Clear();
-            foreach (var a in player.GetEquipped())
-                inv_items.Add(new InvItem { item = a.item, index = a.index, count = 1, selected_count = 0, selected = false });
-            for (int i = 0; i < player.items.Count; ++i)
-                inv_items.Add(new InvItem
-                {
-                    item = player.items[i].item,
-                    index = i,
-                    count = player.items[i].count,
-                    selected_count = 0,
-                    selected = false
-                });
-        }
-
         void ShowInventory(InventoryAction action, bool check_items)
         {
             if(mode == Mode.Inventory)
@@ -163,7 +162,7 @@ namespace hunters
             }
             else
             {
-                BuildInventory();
+                PopulateInvItems(player.Items);
                 if (check_items && inv_items.Count == 0)
                     ShowDialog(NO_ITEMS);
                 else
@@ -178,27 +177,46 @@ namespace hunters
             inv_have_number = false;
         }
 
+        void PopulateInvItems(IEnumerable<IndexedItem<Item>> items)
+        {
+            inv_items.Clear();
+            foreach (var a in items)
+                inv_items.Add(new InvItem
+                {
+                    item = a.item,
+                    count = 1,
+                    index = a.index,
+                    selected = false,
+                    selected_count = 0
+                });
+        }
+
+        void PopulateInvItems(IEnumerable<IndexedItem<ItemSlot>> items)
+        {
+            inv_items.Clear();
+            foreach (var a in items)
+                inv_items.Add(new InvItem
+                {
+                    item = a.item.item,
+                    count = a.item.count,
+                    index = a.index,
+                    selected = false,
+                    selected_count = 0
+                });
+        }
+
         void ShowInventory2(InventoryAction action)
         {
             switch(action)
             {
                 case InventoryAction.Equip:
                     {
-                        inv_items.Clear();
                         var to_equip = player.items.GetIndexes().Where(x => x.item.item.IsEquipable);
                         if (!to_equip.Any())
                             ShowDialog("You don't have any items to equip.");
                         else
                         {
-                            foreach (var a in to_equip)
-                                inv_items.Add(new InvItem
-                                {
-                                    item = a.item.item,
-                                    index = a.index,
-                                    count = 1,
-                                    selected = false,
-                                    selected_count = 0
-                                });
+                            PopulateInvItems(to_equip);
                             inv_from_game = (mode != Mode.Inventory);
                             mode = Mode.Inventory;
                             inv_action = InventoryAction.Equip;
@@ -208,21 +226,12 @@ namespace hunters
                     break;
                 case InventoryAction.Remove:
                     {
-                        inv_items.Clear();
                         var to_remove = player.GetEquipped();
                         if (!to_remove.Any())
                             ShowDialog("You don't have any items to remove.");
                         else
                         {
-                            foreach (var a in to_remove)
-                                inv_items.Add(new InvItem
-                                {
-                                    item = a.item,
-                                    index = a.index,
-                                    count = 1,
-                                    selected = false,
-                                    selected_count = 0
-                                });
+                            PopulateInvItems(to_remove);
                             inv_from_game = (mode != Mode.Inventory);
                             mode = Mode.Inventory;
                             inv_action = InventoryAction.Remove;
@@ -232,19 +241,10 @@ namespace hunters
                     break;
                 case InventoryAction.Use:
                     {
-                        inv_items.Clear();
-                        var to_use = player.items.GetIndexes().Where(x => x.item.item.IsUseable);
+                        var to_use = player.Items.Where(x => x.item.item.IsUseable);
                         if(to_use.Any())
                         {
-                            foreach (var a in to_use)
-                                inv_items.Add(new InvItem
-                                {
-                                    item = a.item.item,
-                                    index = a.index,
-                                    count = a.item.count,
-                                    selected = false,
-                                    selected_count = 0
-                                });
+                            PopulateInvItems(to_use);
                             inv_from_game = (mode != Mode.Inventory);
                             mode = Mode.Inventory;
                             inv_action = InventoryAction.Use;
@@ -254,10 +254,55 @@ namespace hunters
                             ShowDialog("You don't have any useable items.");
                     }
                     break;
+                case InventoryAction.Throw:
+                    {
+                        inv_items.Clear();
+                        var to_throw = player.Items.Where(x => x.index != Unit.INDEX_ARMOR);
+                        if (to_throw.Any())
+                        {
+                            PopulateInvItems(to_throw);
+                            inv_from_game = (mode != Mode.Inventory);
+                            mode = Mode.Inventory;
+                            inv_action = InventoryAction.Throw;
+                            inv_selected = -1;
+                        }
+                        else
+                            ShowDialog("You don't have any throwable items.");
+                    }
+                    break;
             }
         }
 
         private readonly string NO_ITEMS = "You don't have any items.";
+
+        void PickThrowTarget()
+        {
+            var targets = units.Where(x => x != player)
+                .Select(unit => new { unit, dist = unit.pos.Distance(player.pos) })
+                .Where(x => x.dist < 12);
+            if(!targets.Any(x => x.unit == throw_target))
+            {
+                // unit don't have old target, chose nearest
+                if(targets.Any())
+                {
+                    throw_target = targets.MaxBy(x => x.dist).unit;
+                    look_pos = throw_target.pos;
+                }
+                else
+                {
+                    throw_target = null;
+                    look_pos = player.pos;
+                }
+            }
+            else
+            {
+                // use old target
+                look_pos = throw_target.pos;
+            }
+
+            look_timer = 0;
+            look_blink = true;
+        }
 
         bool UpdatePlayer()
         {
@@ -299,7 +344,9 @@ namespace hunters
             }
             else if (k.KeyChar == '?')
             {
-                ShowDialog("$amControls\n==========\n$alNumpad 1-9 - walk around, Numpad 5 - wait\n"
+                ShowDialog("$amControls\n==========\n$a"
+                    + "lNumpad 1-9 - walk around, Numpad 5 - wait, l - look\n"
+                    + "t - throw\n"
                     + "i - inventory, e - equip, r - remove, u - use, d - drop, g/G - get\n"
                     + "? - controls, S - save, Q - quit");
             }
@@ -355,6 +402,37 @@ namespace hunters
             {
                 // use item
                 ShowInventory2(InventoryAction.Use);
+            }
+            else if(k.KeyChar == 'l')
+            {
+                // look around
+                mode = Mode.Look;
+                look_pos = player.pos;
+                look_timer = 0;
+                look_blink = true;
+            }
+            else if(k.KeyChar == 't')
+            {
+                // throw, use last throwable
+                if(throw_prev != null)
+                {
+                    var to_throw = player.items.GetIndexes().Where(x => x.item.item == throw_prev).SingleOrDefault();
+                    if (to_throw.item == null)
+                        throw_prev = null;
+                    else
+                    {
+                        throw_index = to_throw.index;
+                        mode = Mode.Throw;
+                        PickThrowTarget();
+                    }
+                }
+                if (throw_prev == null)
+                    ShowInventory2(InventoryAction.Throw);
+            }
+            else if(k.KeyChar == 'T')
+            {
+                // throw, pick what to throw
+                ShowInventory2(InventoryAction.Throw);
             }
 
             if (dir != null)
@@ -515,7 +593,7 @@ namespace hunters
             }
         }
 
-        public void Update()
+        public bool Update()
         {
             float dt = Console.Update();
             Debug.Print("Dt: {0}\n", dt);
@@ -535,7 +613,7 @@ namespace hunters
                             ShowDialogAction("$amR. I. P.\nTomashu 1990 - 2015", () => { mode = Mode.Exit; });
                     }
                 }
-                else if(mode == Mode.Inventory)
+                else if (mode == Mode.Inventory)
                 {
                     int lines = Math.Min(inv_items.Count, Console.Height - 6);
                     ConsoleKeyInfo k = Console.ReadKey();
@@ -565,7 +643,7 @@ namespace hunters
                     else if (k.KeyChar == '?')
                     {
                         ShowDialog("$amInventory controls\nArrows/Numpad - navigate\nl - look at item\ne - equip item\n"
-                            + "r - remove item\nu - use item\nd - drop item\nEscape - close");
+                            + "r - remove item\nu - use item\nd - drop item\nt - throw item\nEscape - close");
                     }
                     if (inv_action == InventoryAction.None)
                     {
@@ -581,19 +659,59 @@ namespace hunters
                             ShowInventory2(InventoryAction.Remove);
                         else if (k.KeyChar == 'u')
                             ShowInventory2(InventoryAction.Use);
+                        else if (k.KeyChar == 't')
+                            ShowInventory2(InventoryAction.Throw);
                     }
                     else
                     {
-                        if(k.KeyChar == '?')
+                        if (k.KeyChar == '?')
                         {
-                            if (inv_action == InventoryAction.Look)
-                                ShowDialog("$amLook controls\nPress item index to examine it.\nArrows/numpad - navigate\nEscape - exit");
-                            else if(inv_action == InventoryAction.Drop)
-                                ShowDialog("$amDrop controls\nPress item index to select it.\nNumbers - pick count\nArrows/numpad - navigate\n"
-                                    + "Enter - drop items\nEscape - exit");
-                            else if (inv_action == InventoryAction.Get)
-                                ShowDialog("$amDrop controls\nPress item index to select it.\nNumbers - pick count\nArrows/numpad - navigate\n"
-                                    + "* - select all items\nEnter - get items\nEscape - exit");
+                            string verb;
+                            bool multi;
+
+                            switch (inv_action)
+                            {
+                                default:
+                                case InventoryAction.Look:
+                                    verb = "examine";
+                                    multi = false;
+                                    break;
+                                case InventoryAction.Drop:
+                                    verb = "drop";
+                                    multi = true;
+                                    break;
+                                case InventoryAction.Get:
+                                    verb = "get";
+                                    multi = true;
+                                    break;
+                                case InventoryAction.Equip:
+                                    verb = "equip";
+                                    multi = false;
+                                    break;
+                                case InventoryAction.Remove:
+                                    verb = "remove";
+                                    multi = false;
+                                    break;
+                                case InventoryAction.Use:
+                                    verb = "use";
+                                    multi = false;
+                                    break;
+                                case InventoryAction.Throw:
+                                    verb = "throw";
+                                    multi = false;
+                                    break;
+                            }
+
+                            string text;
+                            if(multi)
+                                text = "$am{0} controls\nPress item index to select it.\nNumbers - pick count\n"
+                                    + "Backspace/delete - alter count\nArrows/numpad - navigate\n"
+                                    + "Enter - {1} items\nEscape - exit";
+                            else
+                                text = "$am{0} controls\nPress item index to {1} it.\nArrows/numpad - navigate\n"
+                                        + "Escape - exit";
+                            
+                            ShowDialog(string.Format(text, verb.Up(), verb));
                         }
                         else if (k.Key == ConsoleKey.Escape)
                         {
@@ -612,9 +730,9 @@ namespace hunters
                                 inv_action = InventoryAction.None;
                             }
                         }
-                        else if(k.Key == ConsoleKey.Enter)
+                        else if (k.Key == ConsoleKey.Enter)
                         {
-                            if(inv_action == InventoryAction.Drop)
+                            if (inv_action == InventoryAction.Drop)
                             {
                                 var to_drop = inv_items.Where(x => x.selected_count > 0);
                                 if (to_drop.Any())
@@ -642,10 +760,10 @@ namespace hunters
                                     player_acted = true;
                                 }
                             }
-                            else if(inv_action == InventoryAction.Get)
+                            else if (inv_action == InventoryAction.Get)
                             {
                                 var to_get = inv_items.Where(x => x.selected_count > 0);
-                                if(to_get.Any())
+                                if (to_get.Any())
                                 {
                                     Tile t = map[player.pos];
 
@@ -668,7 +786,7 @@ namespace hunters
                                 }
                             }
                         }
-                        else if(k.KeyChar >= 'a' && k.KeyChar <= 'z')
+                        else if (k.KeyChar >= 'a' && k.KeyChar <= 'z')
                         {
                             int index = k.KeyChar - 'a';
                             int found_index = -1;
@@ -676,27 +794,27 @@ namespace hunters
                             for (int i = 0; i < Math.Min(inv_items.Count, lines); ++i)
                             {
                                 int item_index = (i + inv_offset) % 26;
-                                if(index == item_index)
+                                if (index == item_index)
                                 {
                                     found_index = i + inv_offset;
                                     break;
                                 }
                             }
 
-                            if(found_index != -1)
+                            if (found_index != -1)
                             {
+                                InvItem item = inv_items[found_index];
                                 if (inv_action == InventoryAction.Look)
                                 {
-                                    ShowDialog(string.Format("You examine {0}. It looks normal.", inv_items[found_index].item.name));
+                                    ShowDialog(string.Format("You examine {0}. It looks normal.", item.item.name));
                                 }
-                                else if(inv_action == InventoryAction.Get || inv_action == InventoryAction.Drop)
+                                else if (inv_action == InventoryAction.Get || inv_action == InventoryAction.Drop)
                                 {
-                                    InvItem item = inv_items[found_index];
                                     if (item.selected_count == 0)
                                         item.selected_count = item.count;
                                     else
                                         item.selected_count = 0;
-                                    if(inv_selected != found_index)
+                                    if (inv_selected != found_index)
                                     {
                                         if (inv_selected != -1)
                                             inv_items[inv_selected].selected = false;
@@ -704,10 +822,9 @@ namespace hunters
                                         inv_selected = found_index;
                                     }
                                 }
-                                else if(inv_action == InventoryAction.Equip)
+                                else if (inv_action == InventoryAction.Equip)
                                 {
                                     // equip item
-                                    InvItem item = inv_items[found_index];
                                     int item_index = Unit.GetIndex(item.item);
                                     Item prev_item = player.GetEquipped(item_index);
                                     player.Equip(item.item);
@@ -735,10 +852,9 @@ namespace hunters
                                     player_acted = true;
 
                                 }
-                                else if(inv_action == InventoryAction.Remove)
+                                else if (inv_action == InventoryAction.Remove)
                                 {
                                     // remove equipped item
-                                    InvItem item = inv_items[found_index];
                                     player.RemoveEquipped(item.index);
                                     player.AddItem(new ItemSlot(item.item, 1));
                                     string text;
@@ -750,10 +866,9 @@ namespace hunters
                                     mode = Mode.Game;
                                     player_acted = true;
                                 }
-                                else if(inv_action == InventoryAction.Use)
+                                else if (inv_action == InventoryAction.Use)
                                 {
                                     // use item
-                                    InvItem item = inv_items[found_index];
                                     player.hp += 5;
                                     if (player.hpmax > 10)
                                         player.hpmax = 10;
@@ -764,11 +879,19 @@ namespace hunters
                                     mode = Mode.Game;
                                     player_acted = true;
                                 }
-                            }                            
+                                else if(inv_action == InventoryAction.Throw)
+                                {
+                                    // throw item
+                                    mode = Mode.Throw;
+                                    throw_index = item.index;
+                                    throw_prev = item.item;
+                                    PickThrowTarget();
+                                }
+                            }
                         }
-                        else if(k.KeyChar >= '0' && k.KeyChar <= '9')
+                        else if (k.KeyChar >= '0' && k.KeyChar <= '9')
                         {
-                            if((inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get) && inv_selected != -1)
+                            if ((inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get) && inv_selected != -1)
                             {
                                 InvItem item = inv_items[inv_selected];
                                 int num = k.KeyChar - '0';
@@ -785,17 +908,17 @@ namespace hunters
                                     inv_have_number = true;
                             }
                         }
-                        else if(k.Key == ConsoleKey.Backspace)
+                        else if (k.Key == ConsoleKey.Backspace)
                         {
                             if ((inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get) && inv_selected != -1)
                             {
                                 InvItem item = inv_items[inv_selected];
                                 item.selected_count /= 10;
-                                if(item.selected_count == 0)
+                                if (item.selected_count == 0)
                                     inv_have_number = false;
                             }
                         }
-                        else if(k.Key == ConsoleKey.Delete)
+                        else if (k.Key == ConsoleKey.Delete)
                         {
                             if ((inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get) && inv_selected != -1)
                             {
@@ -804,11 +927,11 @@ namespace hunters
                                 inv_have_number = false;
                             }
                         }
-                        else if(k.KeyChar == '*')
+                        else if (k.KeyChar == '*')
                         {
-                            if(inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get)
+                            if (inv_action == InventoryAction.Drop || inv_action == InventoryAction.Get)
                             {
-                                if(inv_items.All(x => x.selected_count == x.count))
+                                if (inv_items.All(x => x.selected_count == x.count))
                                 {
                                     // all selected, deselect
                                     inv_items.ForEach(x => x.selected_count = 0);
@@ -822,14 +945,93 @@ namespace hunters
                         }
                     }
                 }
+                else if (mode == Mode.Look || mode == Mode.Throw)
+                    return UpdateLook(dt);
             }
+
+            return true;
+        }
+
+        bool UpdateLook(float dt)
+        {
+            bool blink = false;
+
+            look_timer += dt;
+            if (look_timer >= 0.33f)
+            {
+                look_timer = 0;
+                look_blink = !look_blink;
+                blink = true;
+            }
+
+            ConsoleKeyInfo? ka = Console.ReadKey2();
+            if (ka == null)
+                return blink;
+
+            Dir? dir = null;
+            ConsoleKeyInfo k = ka.Value;
+
+            if (k.KeyChar == '?')
+            {
+                ShowDialog("$amLook controls\nArrows/numpad - navigate\nl - examine tile\nc - center on yourself\n"
+                    + "Escape - exit");
+            }
+            else if (k.KeyChar == 'l')
+            {
+                ShowDialog("This tile is very interesting!");
+            }
+            else if (k.KeyChar == 'c')
+            {
+                look_pos = player.pos;
+            }
+            else if (k.Key == ConsoleKey.Escape)
+            {
+                mode = Mode.Game;
+            }
+            else if (k.Key == ConsoleKey.NumPad1)
+                dir = Dir.Dir1;
+            else if (k.Key == ConsoleKey.NumPad2 || k.Key == ConsoleKey.DownArrow)
+                dir = Dir.Dir2;
+            else if (k.Key == ConsoleKey.NumPad3)
+                dir = Dir.Dir3;
+            else if (k.Key == ConsoleKey.NumPad4 || k.Key == ConsoleKey.LeftArrow)
+                dir = Dir.Dir4;
+            else if (k.Key == ConsoleKey.NumPad6 || k.Key == ConsoleKey.RightArrow)
+                dir = Dir.Dir6;
+            else if (k.Key == ConsoleKey.NumPad7)
+                dir = Dir.Dir7;
+            else if (k.Key == ConsoleKey.NumPad8 || k.Key == ConsoleKey.UpArrow)
+                dir = Dir.Dir8;
+            else if (k.Key == ConsoleKey.NumPad9)
+                dir = Dir.Dir9;
+            else
+                return blink;
+
+            if (dir != null)
+            {
+                Pos change = dirs[(int)dir].change;
+                if (k.Modifiers == ConsoleModifiers.Shift)
+                    change *= 5;
+                look_pos += change;
+                if (look_pos.x < 0)
+                    look_pos.x = 0;
+                else if (look_pos.x >= map.w)
+                    look_pos.x = map.w - 1;
+                if (look_pos.y < 0)
+                    look_pos.y = 0;
+                else if (look_pos.y >= map.h)
+                    look_pos.y = map.h - 1;
+            }
+
+            return true;
         }
 
         public void Draw()
         {
             Console.Clear();
 
-            Pos offset = new Pos(player.pos.x - screen_size.x / 2, player.pos.y - screen_size.y / 2);
+            Pos my_pos = ((mode == Mode.Look || mode == Mode.Throw) ? look_pos : player.pos);
+            Pos offset = new Pos(my_pos.x - screen_size.x / 2, my_pos.y - screen_size.y / 2);
             offset.y -= 1;
 
             short bkg = (((short)ConsoleColor.DarkGray) << 4) | ((short)ConsoleColor.Black);
@@ -875,6 +1077,45 @@ namespace hunters
                     Console.buf[u.pos.x - offset.x + (u.pos.y - offset.y) * Console.Width].Char.UnicodeChar = '@';
             }
 
+            if (mode == Mode.Look || mode == Mode.Throw)
+            {
+                if (mode == Mode.Throw)
+                {
+                    int type = 0;
+                    foreach (Pos pt in Utils.Line(player.pos, look_pos))
+                    {
+                        ConsoleColor color;
+                        if (type == 0)
+                        {
+                            type = 1;
+                            continue;
+                        }
+                        else if (type >= 2)
+                        {
+                            type = 3;
+                            color = ConsoleColor.Red;
+                        }
+                        else if (map[pt].wall || map[pt].unit != null)
+                        {
+                            type = 2;
+                            color = ConsoleColor.Yellow;
+                        }
+                        else
+                            color = ConsoleColor.Gray;
+                        Console.buf[pt.x - offset.x + (pt.y - offset.y) * Console.Width].Set('*', (short)color);
+                    }
+                }
+
+                string text2 = (mode == Mode.Look ? "Look mode" : "Throw mode");
+                Console.WriteText(text2, new Pos((Console.Width - text2.Length) / 2, Console.Height - 1),
+                        Console.MakeColor(ConsoleColor.Black, ConsoleColor.White));
+                if (look_blink)
+                {
+                    int off = my_pos.x - offset.x + (my_pos.y - offset.y) * Console.Width;
+                    Console.buf[off].Attributes = (short)~Console.buf[off].Attributes;
+                }
+            }
+
             if(mode == Mode.Inventory)
             {
                 int w = 50;
@@ -908,6 +1149,9 @@ namespace hunters
                         break;
                     case InventoryAction.Use:
                         inv_text = "USE ITEM";
+                        break;
+                    case InventoryAction.Throw:
+                        inv_text = "THROW ITEM";
                         break;
                 }
 
@@ -977,6 +1221,9 @@ namespace hunters
                             break;
                         case InventoryAction.Use:
                             action_text = "Pick item to use.";
+                            break;
+                        case InventoryAction.Throw:
+                            action_text = "Pick item to throw.";
                             break;
                         default:
                             action_text = "!MISS!";
@@ -1193,7 +1440,9 @@ namespace hunters
             while(mode != Mode.Exit)
             {
                 Draw();
-                Update();
+                bool result = false;
+                while(!result)
+                    result = Update();
             }
         }
     }

@@ -111,6 +111,36 @@ namespace hunters
         {
             return items.Select((item, index) => new IndexedItem<T>(item, index));
         }
+
+        public static void Reserve<T>(this List<T> items, int count)
+        {
+            items.Capacity = Math.Max(items.Capacity, count);
+        }
+
+        public static string Up(this string s)
+        {
+            return char.ToUpper(s[0]) + s.Substring(1);
+        }
+
+        public static T MaxBy<T>(this IEnumerable<T> items, Func<T, int> selector)
+        {
+            var it = items.GetEnumerator();
+
+            T best = it.Current;
+            int best_val = selector(it.Current);
+
+            while(it.MoveNext())
+            {
+                int val = selector(it.Current);
+                if(val > best_val)
+                {
+                    best_val = val;
+                    best = it.Current;
+                }
+            }
+
+            return best;
+        }
     }
 
     public struct IndexedItem<T>

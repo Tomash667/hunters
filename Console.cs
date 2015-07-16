@@ -89,8 +89,8 @@ namespace hunters
         private static SmallRect rect;
         private static Coord buf_size;
         private static Coord buf_pos;
-        private static long timer;
-        private static float freq;
+        private static float timer;
+        private static double freq;
 
         public static CharInfo[] buf;
 
@@ -134,8 +134,10 @@ namespace hunters
             long freql;
             if (!QueryPerformanceFrequency(out freql))
                 throw new Exception("Failed to init timer.");
-            freq = (float)freql;
-            QueryPerformanceCounter(out timer);
+            freq = (double)freql;
+            long timerl;
+            QueryPerformanceCounter(out timerl);
+            timer = (float)(timerl / freq);
 
             System.Console.CursorVisible = false;
             System.Console.SetWindowSize(w, h);
@@ -159,9 +161,10 @@ namespace hunters
 
         private static float Tick()
         {
-            long new_time;
-            QueryPerformanceCounter(out new_time);
-            float dt = (float)(new_time - timer) / freq;
+            long new_timel;
+            QueryPerformanceCounter(out new_timel);
+            float new_time = (float)(new_timel / freq);
+            float dt = new_time - timer;
             timer = new_time;
             return dt;
         }
@@ -182,6 +185,14 @@ namespace hunters
         public static ConsoleKeyInfo ReadKey()
         {
             return System.Console.ReadKey(true);
+        }
+
+        public static ConsoleKeyInfo? ReadKey2()
+        {
+            if (System.Console.KeyAvailable)
+                return System.Console.ReadKey(true);
+            else
+                return null;
         }
 
         public static void WriteText(string text, Pos pos)

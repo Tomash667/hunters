@@ -1,7 +1,24 @@
-﻿+ f - fire
-+ camera bufer
-+ l - look around
+﻿+ t - throw
+	+ item name (count) on bottom
+	+ line
+		+ order is wrong
+		+ looks stupid
+		+ end is not drawn on left top
+	+ throwing
+	+ animation
++ gun
++ f - fire
++ ammo
++ reload ammo
++ change ammo
 + P - message history
 + drop/get/equip can take multiple turns
 + menu
 + save/load
++ stats screen
++ don't update screen on invalid key
++ fog of war
++ look distance
++ look at tile
++ look at item
++ blood animation

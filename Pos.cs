@@ -31,6 +31,11 @@ namespace hunters
             return new Pos(a.x / v, a.y / v);
         }
 
+        public static Pos operator * (Pos a, int v)
+        {
+            return new Pos(a.x * v, a.y * v);
+        }
+
         public int Distance(Pos a)
         {
             return Math.Max(Math.Abs(x - a.x), Math.Abs(y - a.y));

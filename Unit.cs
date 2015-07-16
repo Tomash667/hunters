@@ -31,6 +31,17 @@ namespace hunters
             ItemSlot.AddItem(slot, items);
         }
 
+        public IEnumerable<IndexedItem<ItemSlot>> Items
+        {
+            get
+            {
+                foreach (var a in GetEquipped())
+                    yield return new IndexedItem<ItemSlot>(new ItemSlot(a.item, 1), a.index);
+                foreach (var a in items.GetIndexes())
+                    yield return a;
+            }
+        }
+
         public IEnumerable<IndexedItem<Item>> GetEquipped()
         {
             if (weapon != null)
