@@ -1,4 +1,10 @@
-﻿+ t - throw
+﻿+ open doors by walking
++ opened doors don't block los
++ open / close command
+
++ better colors for visited tiles
++ t - throw
+	+ A* for shoot path
 	+ item name (count) on bottom
 	+ line
 		+ order is wrong
@@ -22,3 +28,15 @@
 + look at tile
 + look at item
 + blood animation
++ missing, projecticle hitting other targets
++ locked doors
++ kicking doors
++ keys
++ picklocking
++ chests
++ locked chests
++ known items on ground/doors history
+- better handling of pressed button
+
+http://www.roguebasin.com/index.php?title=Articles
+http://www.roguebasin.com/index.php?title=How_to_Write_a_Roguelike_in_15_Steps

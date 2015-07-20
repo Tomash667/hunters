@@ -8,25 +8,83 @@ namespace hunters
 {
     class Tile
     {
-        public bool wall;
-        public Unit unit;
-        public List<ItemSlot> items;
-
-        public Tile(bool _wall)
+        public enum Type
         {
-            wall = _wall;
-            unit = null;
-            items = null;
+            Empty,
+            Wall,
+            Door
         }
 
-        public char GetGlyph()
+        [Flags]
+        public enum Flags
         {
-            if (unit != null)
-                return '@';
-            else if (wall)
+            Lit = 1<<0,
+            Known = 1<<1,
+            Open = 1<<2,
+            LastOpen = 1<<3
+        }
+
+        public Unit unit;
+        public List<ItemSlot> items;
+        public Type type;
+        public Flags flags;
+
+        public Tile()
+        {
+            int c = Utils.r.Next(100);
+            if (c < 70)
+                type = Type.Empty;
+            else if (c < 90)
+                type = Type.Wall;
+            else
+                type = Type.Door;
+            unit = null;
+            items = null;
+            flags = 0;
+        }
+
+        public char GetGlyph(out bool lit)
+        {
+            if((flags & Flags.Known) == 0)
+            {
+                lit = false;
+                return ' ';
+            }
+            if ((flags & Flags.Lit) != 0)
+            {
+                lit = true;
+                if (unit != null)
+                    return '@';
+                else if (items != null)
+                    return 'i';
+                else if(type == Type.Door)
+                {
+                    if((flags & Flags.Open) != 0)
+                    {
+                        flags |= Flags.LastOpen;
+                        return '-';
+                    }
+                    else
+                    {
+                        flags &= ~Flags.LastOpen;
+                        return '+';
+                    }
+
+                }
+            }
+            else
+            {
+                lit = false;
+                if(type == Type.Door)
+                {
+                    if((flags & Flags.LastOpen) != 0)
+                        return '-';
+                    else
+                        return '+';
+                }
+            }
+            if(type == Type.Wall)
                 return '#';
-            else if (items != null)
-                return 'i';
             else
                 return '.';
         }

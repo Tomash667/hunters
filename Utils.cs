@@ -60,5 +60,35 @@ namespace hunters
                 }
             }
         }
+
+        public static IEnumerable<Pos> DrawCircle(Pos pos, int radius)
+        {
+            int x = radius;
+            int y = 0;
+            int decisionOver2 = 1 - x;   // Decision criterion divided by 2 evaluated at x=r, y=0
+
+            while (x >= y)
+            {
+                yield return new Pos(x + pos.x, y + pos.y);
+                yield return new Pos(x + pos.x, y + pos.y);
+                yield return new Pos(y + pos.x, x + pos.y);
+                yield return new Pos(-x + pos.x, y + pos.y);
+                yield return new Pos(-y + pos.x, x + pos.y);
+                yield return new Pos(-x + pos.x, -y + pos.y);
+                yield return new Pos(-y + pos.x, -x + pos.y);
+                yield return new Pos(x + pos.x, -y + pos.y);
+                yield return new Pos(y + pos.x, -x + pos.y);
+                y++;
+                if (decisionOver2 <= 0)
+                {
+                    decisionOver2 += 2 * y + 1;   // Change in decision criterion for y -> y+1
+                }
+                else
+                {
+                    x--;
+                    decisionOver2 += 2 * (y - x) + 1;   // Change for y -> y+1, x -> x-1
+                }
+            }
+        }
     }
 }

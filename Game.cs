@@ -48,6 +48,7 @@ namespace hunters
         bool inv_have_number, player_acted, inv_from_game;
         List<InvItem> inv_items = new List<InvItem>();
         InventoryAction inv_action;
+        const int RADIUS = 5;
 
         Pos look_pos;
         float look_timer;
@@ -61,7 +62,7 @@ namespace hunters
         {
             Console.Init("Hunters", 70, 26, 20);
             screen_size = new Pos(70, 20);
-            map = new Map(100, 100);
+            map = new Map(50, 50);
             mode = Mode.Game;
 
             player = new Unit { pos = new Pos(5, 5), ai = false };
@@ -71,20 +72,20 @@ namespace hunters
             player.items.Add(new ItemSlot(Item.items[3], 15));
             Tile t = map[player.pos];
             t.unit = player;
-            t.wall = false;
+            t.type = Tile.Type.Empty;
             units = new List<Unit>();
             units.Add(player);
 
             Unit ai = new Unit { pos = new Pos(20, 10), ai = true };
             t = map[ai.pos];
             t.unit = ai;
-            t.wall = false;
+            t.type = Tile.Type.Empty;
             units.Add(ai);
 
             ai = new Unit { pos = new Pos(10, 20), ai = true };
             t = map[ai.pos];
             t.unit = ai;
-            t.wall = false;
+            t.type = Tile.Type.Empty;
             units.Add(ai);
 
             AddText("Welcome Tomashu! Press ? for controls.");
@@ -92,6 +93,7 @@ namespace hunters
             // reset on new game/load
             throw_prev = null;
             throw_target = null;
+            map.CalculateFov(player.pos, RADIUS);
         }
 
         public bool HandleQuitDialog()
@@ -456,6 +458,7 @@ namespace hunters
                         t.unit = player;
                         map[player.pos].unit = null;
                         player.pos = new_pos;
+                        map.CalculateFov(player.pos, RADIUS);
                         if (t.items != null)
                         {
                             if (t.items.Count == 1)
@@ -1063,19 +1066,7 @@ namespace hunters
             // map
             map.Draw(screen_size, offset, new Pos(0, -1));
 
-            // units
-            int left = Math.Max(0, offset.x);
-            int right = Math.Min(map.w, offset.x + screen_size.x);
-            int top = Math.Max(0, offset.y);
-            int bottom = Math.Min(map.h, offset.y + screen_size.y);
-
             offset.y -= 1;
-
-            foreach (Unit u in units)
-            {
-                if(u.pos.x >= left && u.pos.x < right && u.pos.y >= top && u.pos.y < bottom)
-                    Console.buf[u.pos.x - offset.x + (u.pos.y - offset.y) * Console.Width].Char.UnicodeChar = '@';
-            }
 
             if (mode == Mode.Look || mode == Mode.Throw)
             {
@@ -1095,7 +1086,7 @@ namespace hunters
                             type = 3;
                             color = ConsoleColor.Red;
                         }
-                        else if (map[pt].wall || map[pt].unit != null)
+                        else if (map[pt].type == Tile.Type.Wall || map[pt].unit != null)
                         {
                             type = 2;
                             color = ConsoleColor.Yellow;

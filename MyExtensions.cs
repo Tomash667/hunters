@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -141,6 +142,23 @@ namespace hunters
 
             return best;
         }
+
+        /*public static bool IsSet<T>(this T _value, T _flag) where T : Enum
+        {
+            long value = Convert.ToInt64(_value);
+            long flag = Convert.ToInt64(_flag);
+            return (value & flag) != 0;
+        }*/
+
+        public static Iterator<T> Begin<T>(this List<T> items)
+        {
+            return new Iterator<T>(items, 0);
+        }
+
+        public static Iterator<T> End<T>(this List<T> items)
+        {
+            return new Iterator<T>(items, items.Count);
+        }
     }
 
     public struct IndexedItem<T>
@@ -152,6 +170,79 @@ namespace hunters
         {
             item = _item;
             index = _index;
+        }
+    }
+
+    public struct Iterator<T>
+    {
+        public List<T> items;
+        public int index;
+
+        public Iterator(List<T> _items, int _index)
+        {
+            items = _items;
+            index = _index;
+        }
+
+        public Iterator<T> Insert(T what)
+        {
+            items.Insert(index, what);
+            Iterator<T> result = new Iterator<T>(items, index);
+            ++index;
+            return result;
+        }
+
+        public void Erase()
+        {
+            if (index < items.Count)
+                items.RemoveAt(index);
+        }
+
+        public T Current
+        {
+            get
+            {
+                return items[index];
+            }
+        }
+
+        public static bool operator == (Iterator<T> a, Iterator<T> b)
+        {
+            Debug.Assert(a.items == b.items);
+            return a.index == b.index;
+        }
+
+        public static bool operator != (Iterator<T> a, Iterator<T> b)
+        {
+            Debug.Assert(a.items == b.items);
+            return a.index != b.index;
+        }
+
+        public static Iterator<T> operator ++ (Iterator<T> a)
+        {
+            return new Iterator<T>(a.items, a.index + 1);
+        }
+
+        public override bool Equals(object o)
+        {
+            if (o == null)
+                return false;
+
+            if (o is Iterator<T>)
+            {
+                Iterator<T> a = (Iterator<T>)o;
+                return items == a.items && index == a.index;
+            }
+            else
+                return false;
+        }
+
+        public override int GetHashCode()
+        {
+            int hash = 13;
+            hash = (hash * 7) + items.GetHashCode();
+            hash = (hash * 7) + index.GetHashCode();
+            return hash;
         }
     }
 }
