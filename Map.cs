@@ -62,14 +62,69 @@ namespace hunters
         public bool CanMove(Pos old_pos, Pos new_pos, bool diagonal)
         {
             Tile t = m[new_pos.x + new_pos.y * w];
-            if(t.type == Tile.Type.Empty && t.unit == null)
+            if(t.unit == null && t.CanMove())
             {
                 if (!diagonal)
                     return true;
-                if (m[old_pos.x + new_pos.y * w].type == Tile.Type.Empty || m[new_pos.x + old_pos.y * w].type == Tile.Type.Empty)
+                if (m[old_pos.x + new_pos.y * w].CanMove() || m[new_pos.x + old_pos.y * w].CanMove())
                     return true;
             }
             return false;
+        }
+
+        public Tile GetTileSafe(Pos pos)
+        {
+            if (pos.x < 0 || pos.y < 0 || pos.x >= w || pos.y >= h)
+                return null;
+            else
+                return m[pos.x + pos.y * w];
+        }
+
+        public IEnumerable<Tile> GetNearTiles(Pos pos)
+        {
+            if(pos.x > 0)
+            {
+                if (pos.y > 0)
+                    yield return m[pos.x - 1 + (pos.y - 1) * w];
+                yield return m[pos.x - 1 + pos.y * w];
+                if (pos.y < h)
+                    yield return m[pos.x - 1 + (pos.y + 1) * w];
+            }
+            if(pos.x < w)
+            {
+                if (pos.y > 0)
+                    yield return m[pos.x + 1 + (pos.y - 1) * w];
+                yield return m[pos.x + 1 + pos.y * w];
+                if (pos.y < h)
+                    yield return m[pos.x + 1 + (pos.y + 1) * w];
+            }
+            if (pos.y > 0)
+                yield return m[pos.x + (pos.y - 1) * w];
+            if (pos.y < h)
+                yield return m[pos.x + (pos.y + 1) * w];
+        }
+
+        public void Save(BinaryWriter f)
+        {
+            f.Write(w);
+            f.Write(h);
+            for (int i = 0; i < w * h; ++i)
+                m[i].Save(f);
+        }
+
+        public void Load(BinaryReader f)
+        {
+            f.Read(out w);
+            f.Read(out h);
+            if (w < 5 || h < 5 || w > 200 || h > 200)
+                throw new Exception(string.Format("Invalid map size {0}, {1}.", w, h));
+            m = new List<Tile>();
+            for (int i = 0; i < w * h; ++i)
+            {
+                Tile t = new Tile();
+                t.Load(f);
+                m.Add(t);
+            }
         }
         
         void CreateMask(int radius)
@@ -188,7 +243,7 @@ namespace hunters
         Pos source, extent, quadrant;
 	    List<Bump> steepBumps = new List<Bump>();
 	    List<Bump> shallowBumps = new List<Bump>();
-	    List<Field> activeFields = new List<Field>();
+	    LList<Field> activeFields = new LList<Field>();
         bool[,] mask;
         int mask_radius = -1;
         Pos shallowOrigin, steepOrigin;
@@ -209,6 +264,12 @@ namespace hunters
 
             Tile t = m[x+y*w];
 
+            if(t.type == Tile.Type.Door)
+            {
+                if ((t.flags & Tile.Flags.Open) != 0)
+                    return false;
+            }
+
             return t.type != Tile.Type.Empty;
 	    }
 
@@ -220,7 +281,7 @@ namespace hunters
         void visit(Pos pos)
         {
             Tile t = m[pos.x + pos.y * w];
-            t.flags = Tile.Flags.Known | Tile.Flags.Lit;
+            t.flags |= Tile.Flags.Known | Tile.Flags.Lit;
         }
 
         void checkVisit(Pos pos, Pos adjustedPos)
@@ -255,17 +316,19 @@ namespace hunters
             return result;
 	    }
 
-        void checkField(Iterator<Field> currentField)
+        LList<Field>.Iterator checkField(LList<Field>.Iterator currentField)
 	    {
 		    // If the two slopes are colinear, and if they pass through either
 		    // extremity, remove the field of view.
-		    if (currentField.Current.shallow.doesContain(currentField.Current.steep.near)
-			    && currentField.Current.shallow.doesContain(currentField.Current.steep.far)
+            if (currentField.Current.shallow.doesContain(currentField.Current.steep.near)
+                && currentField.Current.shallow.doesContain(currentField.Current.steep.far)
                 && (currentField.Current.shallow.doesContain(shallowOrigin)
                 || currentField.Current.shallow.doesContain(steepOrigin)))
-		    {
-                currentField.Erase();
-		    }
+            {
+                return activeFields.Erase(currentField);
+            }
+            else
+                return currentField;
 	    }
 
 	    void addShallowBump(Pos pos, Field currentField)
@@ -306,14 +369,14 @@ namespace hunters
 		    }
 	    }
 
-	    void visitSquare(Pos dest, Iterator<Field> currentField)
+	    void visitSquare(Pos dest, ref LList<Field>.Iterator currentField)
 	    {
             //Debug.Print(string.Format("{0}, {1}", dest.x, dest.y));
 
 		    // The top-left and bottom-right corners of the destination square.
 		    Pos topLeft = new Pos(dest.x, dest.y + fov_size);
 		    Pos bottomRight = new Pos(dest.x + fov_size, dest.y);
-            Iterator<Field> end = activeFields.End();
+            LList<Field>.Iterator end = activeFields.End();
 		    while (currentField != end && currentField.Current.steep.isBelowOrContains(bottomRight))
 		    {
                 //Debug.Print("ABOVE");
@@ -356,7 +419,7 @@ namespace hunters
                 //Debug.Print("BLOCKING");
 			    // case BLOCKING
 			    // Both lines intersect the square. This current field has ended.
-                currentField.Erase();
+                currentField = activeFields.Erase(currentField);
 		    }
 		    else if (currentField.Current.shallow.isAbove(bottomRight))
 		    {
@@ -364,7 +427,7 @@ namespace hunters
 			    // case SHALLOW BUMP
 			    // The square intersects only the shallow line.
 			    addShallowBump(topLeft, currentField.Current);
-			    checkField(currentField);
+			    currentField = checkField(currentField);
 		    }
 		    else if (currentField.Current.steep.isBelow(topLeft))
 		    {
@@ -379,12 +442,12 @@ namespace hunters
                // Debug.Print("BETWEEN");
 			    // case BETWEEN
 			    // The square intersects neither line. We need to split into two fields.
-			    Iterator<Field> steeperField = currentField;
-                Iterator<Field> shallowerField = steeperField.Insert(currentField.Current.Copy());
-			    addSteepBump(bottomRight, shallowerField.Current);
-			    checkField(shallowerField);
-			    addShallowBump(topLeft, steeperField.Current);
-			    checkField(steeperField);
+			    LList<Field>.Iterator steeperField = currentField;
+                LList<Field>.Iterator shallowerField = activeFields.Insert(currentField, currentField.Current.Copy());
+                addSteepBump(bottomRight, shallowerField.Current);
+                checkField(shallowerField);
+                addShallowBump(topLeft, steeperField.Current);
+                currentField = checkField(steeperField);
 		    }
 	    }
 
@@ -401,7 +464,7 @@ namespace hunters
             if (quadrant.x == 1 && quadrant.y == 1)
                 visit(source);
 
-            Iterator<Field> currentField = activeFields.Begin();
+            var currentField = activeFields.Begin();
             int i, j, maxI = extent.x + extent.y;
             Pos dest = new Pos();
 
@@ -415,7 +478,7 @@ namespace hunters
 			    {
 				    dest.x = (i-j) * fov_size;
                     dest.y = j * fov_size;
-				    visitSquare(dest, currentField);
+				    visitSquare(dest, ref currentField);
 			    }
 			    currentField = activeFields.Begin();
 		    }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,11 +12,14 @@ namespace hunters
     {
         enum Mode
         {
+            Invalid,
             Game,
             Inventory,
             Exit,
             Look,
-            Throw
+            Throw,
+            OpenDoor,
+            CloseDoor
         }
 
         enum InventoryAction
@@ -44,11 +48,13 @@ namespace hunters
         public Pos screen_size;
         public Queue<string> texts = new Queue<string>();
         Mode mode;
+        string player_name;
         int inv_offset, inv_selected;
         bool inv_have_number, player_acted, inv_from_game;
         List<InvItem> inv_items = new List<InvItem>();
         InventoryAction inv_action;
-        const int RADIUS = 5;
+        const int RADIUS = 8;
+        TextWriter log;
 
         Pos look_pos;
         float look_timer;
@@ -60,9 +66,40 @@ namespace hunters
 
         public void Init()
         {
+            // init log
+            log = new StreamWriter("log.txt");
+            log.WriteLine("Hunters - version 0");
+            log.WriteLine(DateTime.Now.ToString());
+            log.Flush();
+
+            // init console
             Console.Init("Hunters", 70, 26, 20);
             screen_size = new Pos(70, 20);
             map = new Map(50, 50);
+
+            // start menu
+            Console.Clear();
+            string logo = @" .-. .-..-. .-..-. .-. _______ ,---.  ,---.    .---. 
+ | | | || | | ||  \| ||__   __|| .-'  | .-.\  ( .-._)
+ | `-' || | | ||   | |  )| |   | `-.  | `-'/ (_) \   
+ | .-. || | | || |\  | (_) |   | .-'  |   (  _  \ \  
+ | | |)|| `-')|| | |)|   | |   |  `--.| |\ \( `-'  ) 
+ /(  (_)`---(_)/(  (_)   `-'   /( __.'|_| \)\`----'  
+(__)          (__)            (__)        (__)       ";
+
+            Console.WriteText2(logo);
+            Console.WriteText2("\nCreated by Tomashu - Version 0\n\nYour name: ");
+            player_name = Console.GetText();
+            if (player_name == null)
+                Environment.Exit(0);
+
+            // try load save
+            if(!TryLoad())
+                NewGame();
+        }
+
+        void NewGame()
+        {
             mode = Mode.Game;
 
             player = new Unit { pos = new Pos(5, 5), ai = false };
@@ -88,7 +125,7 @@ namespace hunters
             t.type = Tile.Type.Empty;
             units.Add(ai);
 
-            AddText("Welcome Tomashu! Press ? for controls.");
+            AddText("Welcome {0}! Press ? for controls.", player_name);
 
             // reset on new game/load
             throw_prev = null;
@@ -121,7 +158,7 @@ namespace hunters
             if(Utils.Chance(70 + (a.ai ? 0 : 5)))
             {
                 // hit
-                int dmg = Utils.r.Next(1, 5) + (a.ai ? 0 : 1);
+                int dmg = Utils.Random(1, 5) + (a.ai ? 0 : 1);
                 b.hp -= dmg;
                 if(b.hp <= 0)
                 {
@@ -306,140 +343,39 @@ namespace hunters
             look_blink = true;
         }
 
+        bool GetDir(ConsoleKey k, out Dir dir)
+        {
+            if (k == ConsoleKey.NumPad1)
+                dir = Dir.Dir1;
+            else if (k == ConsoleKey.NumPad2 || k == ConsoleKey.DownArrow)
+                dir = Dir.Dir2;
+            else if (k == ConsoleKey.NumPad3)
+                dir = Dir.Dir3;
+            else if (k == ConsoleKey.NumPad4 || k == ConsoleKey.LeftArrow)
+                dir = Dir.Dir4;
+            else if (k == ConsoleKey.NumPad6 || k == ConsoleKey.RightArrow)
+                dir = Dir.Dir6;
+            else if (k == ConsoleKey.NumPad7)
+                dir = Dir.Dir7;
+            else if (k == ConsoleKey.NumPad8 || k == ConsoleKey.UpArrow)
+                dir = Dir.Dir8;
+            else if (k == ConsoleKey.NumPad9)
+                dir = Dir.Dir9;
+            else
+                dir = Dir.None;
+
+            return (dir != Dir.None);
+        }
+
         bool UpdatePlayer()
         {
-            Pos? dir = null;
-            bool diagonal = true;
+            Dir dir = Dir.None;
 
             ConsoleKeyInfo k = Console.ReadKey();
-            if (k.Key == ConsoleKey.NumPad1)
-                dir = new Pos(-1, 1);
-            else if (k.Key == ConsoleKey.NumPad2 || k.Key == ConsoleKey.DownArrow)
+            if(GetDir(k.Key, out dir))
             {
-                dir = new Pos(0, 1);
-                diagonal = false;
-            }
-            else if (k.Key == ConsoleKey.NumPad3)
-                dir = new Pos(1, 1);
-            else if (k.Key == ConsoleKey.NumPad4 || k.Key == ConsoleKey.LeftArrow)
-            {
-                dir = new Pos(-1, 0);
-                diagonal = false;
-            }
-            else if (k.Key == ConsoleKey.NumPad6 || k.Key == ConsoleKey.RightArrow)
-            {
-                dir = new Pos(1, 0);
-                diagonal = false;
-            }
-            else if (k.Key == ConsoleKey.NumPad7)
-                dir = new Pos(-1, -1);
-            else if (k.Key == ConsoleKey.NumPad8 || k.Key == ConsoleKey.UpArrow)
-            {
-                dir = new Pos(0, -1);
-                diagonal = false;
-            }
-            else if (k.Key == ConsoleKey.NumPad9)
-                dir = new Pos(1, -1);
-            else if (k.Key == ConsoleKey.Q && k.Modifiers == ConsoleModifiers.Shift)
-            {
-                ShowDialog("$amQuit WITHOUT saving?\n(y/n)", HandleQuitDialog);
-            }
-            else if (k.KeyChar == '?')
-            {
-                ShowDialog("$amControls\n==========\n$a"
-                    + "lNumpad 1-9 - walk around, Numpad 5 - wait, l - look\n"
-                    + "t - throw\n"
-                    + "i - inventory, e - equip, r - remove, u - use, d - drop, g/G - get\n"
-                    + "? - controls, S - save, Q - quit");
-            }
-            else if (k.Key == ConsoleKey.NumPad5)
-            {
-                // wait turn
-                return true;
-            }
-            else if (k.KeyChar == 'i')
-                ShowInventory(InventoryAction.None, false);
-            else if(k.KeyChar == 'd')
-                ShowInventory(InventoryAction.Drop, true);
-            else if(k.KeyChar == 'g' || k.KeyChar == 'G')
-            {
-                Tile t = map[player.pos];
-                if (t.items == null)
-                    ShowDialog("There is nothing on ground.");
-                else if(t.items.Count == 1 && k.KeyChar == 'g')
-                {
-                    player.AddItem(t.items[0]);                    
-                    if (t.items[0].count == 1)
-                        AddText("You picked {0} from ground.", t.items[0].item.name);
-                    else
-                        AddText("You picked {0} {1}s from ground.", t.items[0].count, t.items[0].item.name);
-                    t.items = null;
-                    return true;
-                }
-                else
-                {
-                    mode = Mode.Inventory;
-                    inv_action = InventoryAction.Get;
-                    inv_have_number = false;
-                    inv_offset = 0;
-                    inv_selected = -1;
-                    inv_from_game = true;
-                    inv_items.Clear();
-                    for (int i = 0; i < t.items.Count; ++i)
-                        inv_items.Add(new InvItem { item = t.items[i].item, count = t.items[i].count, index = i,
-                            selected = false, selected_count = 0 });                        
-                }
-            }
-            else if(k.KeyChar == 'e')
-            {
-                // equip item
-                ShowInventory2(InventoryAction.Equip);
-            }
-            else if(k.KeyChar == 'r')
-            {
-                // remove item
-                ShowInventory2(InventoryAction.Remove);
-            }
-            else if(k.KeyChar == 'u')
-            {
-                // use item
-                ShowInventory2(InventoryAction.Use);
-            }
-            else if(k.KeyChar == 'l')
-            {
-                // look around
-                mode = Mode.Look;
-                look_pos = player.pos;
-                look_timer = 0;
-                look_blink = true;
-            }
-            else if(k.KeyChar == 't')
-            {
-                // throw, use last throwable
-                if(throw_prev != null)
-                {
-                    var to_throw = player.items.GetIndexes().Where(x => x.item.item == throw_prev).SingleOrDefault();
-                    if (to_throw.item == null)
-                        throw_prev = null;
-                    else
-                    {
-                        throw_index = to_throw.index;
-                        mode = Mode.Throw;
-                        PickThrowTarget();
-                    }
-                }
-                if (throw_prev == null)
-                    ShowInventory2(InventoryAction.Throw);
-            }
-            else if(k.KeyChar == 'T')
-            {
-                // throw, pick what to throw
-                ShowInventory2(InventoryAction.Throw);
-            }
-
-            if (dir != null)
-            {
-                Pos new_pos = player.pos + dir.Value;
+                DirInfo di = dirs[(int)dir];
+                Pos new_pos = player.pos + di.change;
 
                 if (new_pos.x < 0 || new_pos.y < 0 || new_pos.x >= map.w || new_pos.y >= map.h)
                 {
@@ -453,7 +389,7 @@ namespace hunters
                         Attack(player, t.unit);
                         return true;
                     }
-                    else if (map.CanMove(player.pos, new_pos, diagonal))
+                    else if (map.CanMove(player.pos, new_pos, di.diagonal))
                     {
                         t.unit = player;
                         map[player.pos].unit = null;
@@ -473,7 +409,157 @@ namespace hunters
                         }
                         return true;
                     }
+                    else if (t.type == Tile.Type.Door && (t.flags & Tile.Flags.Open) == 0)
+                    {
+                        // open doors
+                        t.flags |= Tile.Flags.Open;
+                        map.CalculateFov(player.pos, RADIUS);
+                        AddText("You opened door.");
+                    }
                 }
+            }
+            else if (k.KeyChar == 'Q')
+            {
+                ShowDialog("$amQuit WITHOUT saving?\n(y/n)", HandleQuitDialog);
+            }
+            else if(k.KeyChar == 'S')
+            {
+                SaveGame();
+            }
+            else if (k.KeyChar == '?')
+            {
+                ShowDialog("$amControls\n==========\n$a"
+                    + "lNumpad 1-9 - walk around, Numpad 5 - wait, l - look\n"
+                    + "t - throw\n"
+                    + "o - open door, c - close door\n"
+                    + "i - inventory, e - equip, r - remove, u - use, d - drop, g/G - get\n"
+                    + "? - controls, S - save, Q - quit");
+            }
+            else if (k.Key == ConsoleKey.NumPad5)
+            {
+                // wait turn
+                return true;
+            }
+            else if (k.KeyChar == 'i')
+                ShowInventory(InventoryAction.None, false);
+            else if (k.KeyChar == 'd')
+                ShowInventory(InventoryAction.Drop, true);
+            else if (k.KeyChar == 'g' || k.KeyChar == 'G')
+            {
+                Tile t = map[player.pos];
+                if (t.items == null)
+                    ShowDialog("There is nothing on ground.");
+                else if (t.items.Count == 1 && k.KeyChar == 'g')
+                {
+                    player.AddItem(t.items[0]);
+                    if (t.items[0].count == 1)
+                        AddText("You picked {0} from ground.", t.items[0].item.name);
+                    else
+                        AddText("You picked {0} {1}s from ground.", t.items[0].count, t.items[0].item.name);
+                    t.items = null;
+                    return true;
+                }
+                else
+                {
+                    mode = Mode.Inventory;
+                    inv_action = InventoryAction.Get;
+                    inv_have_number = false;
+                    inv_offset = 0;
+                    inv_selected = -1;
+                    inv_from_game = true;
+                    inv_items.Clear();
+                    for (int i = 0; i < t.items.Count; ++i)
+                        inv_items.Add(new InvItem
+                        {
+                            item = t.items[i].item,
+                            count = t.items[i].count,
+                            index = i,
+                            selected = false,
+                            selected_count = 0
+                        });
+                }
+            }
+            else if (k.KeyChar == 'e')
+            {
+                // equip item
+                ShowInventory2(InventoryAction.Equip);
+            }
+            else if (k.KeyChar == 'r')
+            {
+                // remove item
+                ShowInventory2(InventoryAction.Remove);
+            }
+            else if (k.KeyChar == 'u')
+            {
+                // use item
+                ShowInventory2(InventoryAction.Use);
+            }
+            else if (k.KeyChar == 'l')
+            {
+                // look around
+                mode = Mode.Look;
+                look_pos = player.pos;
+                look_timer = 0;
+                look_blink = true;
+            }
+            else if (k.KeyChar == 't')
+            {
+                // throw, use last throwable
+                if (throw_prev != null)
+                {
+                    var to_throw = player.items.GetIndexes().Where(x => x.item.item == throw_prev).SingleOrDefault();
+                    if (to_throw.item == null)
+                        throw_prev = null;
+                    else
+                    {
+                        throw_index = to_throw.index;
+                        mode = Mode.Throw;
+                        PickThrowTarget();
+                    }
+                }
+                if (throw_prev == null)
+                    ShowInventory2(InventoryAction.Throw);
+            }
+            else if (k.KeyChar == 'T')
+            {
+                // throw, pick what to throw
+                ShowInventory2(InventoryAction.Throw);
+            }
+            else if (k.KeyChar == 'o')
+            {
+                var tiles = map.GetNearTiles(player.pos).Where(x => x.type == Tile.Type.Door && (x.flags & Tile.Flags.Open) == 0);
+                if (tiles.Any())
+                {
+                    if (tiles.Count() == 1)
+                    {
+                        tiles.First().flags |= Tile.Flags.Open;
+                        map.CalculateFov(player.pos, RADIUS);
+                        AddText("You opened door.");
+                        return true;
+                    }
+                    else
+                        mode = Mode.OpenDoor;
+                }
+                else
+                    ShowDialog("No nearby doors to open.");
+            }
+            else if (k.KeyChar == 'c')
+            {
+                var tiles = map.GetNearTiles(player.pos).Where(x => x.type == Tile.Type.Door && (x.flags & Tile.Flags.Open) != 0);
+                if(tiles.Any())
+                {
+                    if(tiles.Count() == 1)
+                    {
+                        tiles.First().flags &= ~Tile.Flags.Open;
+                        map.CalculateFov(player.pos, RADIUS);
+                        AddText("You closed door.");
+                        return true;
+                    }
+                    else
+                        mode = Mode.CloseDoor;
+                }
+                else
+                    ShowDialog("No nearby doors to close.");
             }
 
             return false;
@@ -488,7 +574,8 @@ namespace hunters
             Dir6,
             Dir7,
             Dir8,
-            Dir9
+            Dir9,
+            None
         }
 
         class DirInfo
@@ -571,7 +658,7 @@ namespace hunters
                             ok = true;
                         else
                         {
-                            bool first = (Utils.r.Next(2) == 0);
+                            bool first = Utils.K2();
                             DirInfo info2 = dirs[(int)(first ? info.other : info.other2)];
                             new_pos = u.pos + info2.change;
                             if(map.CanMove(u.pos, new_pos, info2.diagonal))
@@ -613,7 +700,7 @@ namespace hunters
                         UpdateUnits();
 
                         if (player.hp <= 0)
-                            ShowDialogAction("$amR. I. P.\nTomashu 1990 - 2015", () => { mode = Mode.Exit; });
+                            ShowDialogAction(string.Format("$amR. I. P.\n{0} 1990 - 2015", player_name), () => { mode = Mode.Exit; });
                     }
                 }
                 else if (mode == Mode.Inventory)
@@ -706,14 +793,14 @@ namespace hunters
                             }
 
                             string text;
-                            if(multi)
+                            if (multi)
                                 text = "$am{0} controls\nPress item index to select it.\nNumbers - pick count\n"
                                     + "Backspace/delete - alter count\nArrows/numpad - navigate\n"
                                     + "Enter - {1} items\nEscape - exit";
                             else
                                 text = "$am{0} controls\nPress item index to {1} it.\nArrows/numpad - navigate\n"
                                         + "Escape - exit";
-                            
+
                             ShowDialog(string.Format(text, verb.Up(), verb));
                         }
                         else if (k.Key == ConsoleKey.Escape)
@@ -882,7 +969,7 @@ namespace hunters
                                     mode = Mode.Game;
                                     player_acted = true;
                                 }
-                                else if(inv_action == InventoryAction.Throw)
+                                else if (inv_action == InventoryAction.Throw)
                                 {
                                     // throw item
                                     mode = Mode.Throw;
@@ -950,6 +1037,8 @@ namespace hunters
                 }
                 else if (mode == Mode.Look || mode == Mode.Throw)
                     return UpdateLook(dt);
+                else if (mode == Mode.OpenDoor || mode == Mode.CloseDoor)
+                    return UpdatePickDir(dt);
             }
 
             return true;
@@ -971,46 +1060,10 @@ namespace hunters
             if (ka == null)
                 return blink;
 
-            Dir? dir = null;
+            Dir dir = Dir.None;
             ConsoleKeyInfo k = ka.Value;
 
-            if (k.KeyChar == '?')
-            {
-                ShowDialog("$amLook controls\nArrows/numpad - navigate\nl - examine tile\nc - center on yourself\n"
-                    + "Escape - exit");
-            }
-            else if (k.KeyChar == 'l')
-            {
-                ShowDialog("This tile is very interesting!");
-            }
-            else if (k.KeyChar == 'c')
-            {
-                look_pos = player.pos;
-            }
-            else if (k.Key == ConsoleKey.Escape)
-            {
-                mode = Mode.Game;
-            }
-            else if (k.Key == ConsoleKey.NumPad1)
-                dir = Dir.Dir1;
-            else if (k.Key == ConsoleKey.NumPad2 || k.Key == ConsoleKey.DownArrow)
-                dir = Dir.Dir2;
-            else if (k.Key == ConsoleKey.NumPad3)
-                dir = Dir.Dir3;
-            else if (k.Key == ConsoleKey.NumPad4 || k.Key == ConsoleKey.LeftArrow)
-                dir = Dir.Dir4;
-            else if (k.Key == ConsoleKey.NumPad6 || k.Key == ConsoleKey.RightArrow)
-                dir = Dir.Dir6;
-            else if (k.Key == ConsoleKey.NumPad7)
-                dir = Dir.Dir7;
-            else if (k.Key == ConsoleKey.NumPad8 || k.Key == ConsoleKey.UpArrow)
-                dir = Dir.Dir8;
-            else if (k.Key == ConsoleKey.NumPad9)
-                dir = Dir.Dir9;
-            else
-                return blink;
-
-            if (dir != null)
+            if(GetDir(k.Key, out dir))
             {
                 Pos change = dirs[(int)dir].change;
                 if (k.Modifiers == ConsoleModifiers.Shift)
@@ -1025,24 +1078,180 @@ namespace hunters
                 else if (look_pos.y >= map.h)
                     look_pos.y = map.h - 1;
             }
+            else if (k.KeyChar == '?')
+            {
+                ShowDialog("$amLook controls\nArrows/numpad - navigate\nl - examine tile\nc - center on yourself\n"
+                    + "Escape - exit");
+            }
+            else if (k.KeyChar == 'l')
+            {
+                Tile t = map[look_pos];
+                if ((t.flags & Tile.Flags.Known) != 0)
+                {
+                    List<string> items = new List<string>();
+
+                    if (t.type == Tile.Type.Wall)
+                        items.Add("wall");
+
+                    if ((t.flags & Tile.Flags.Lit) != 0)
+                    {
+                        if (t.type == Tile.Type.Door)
+                        {
+                            if ((t.flags & Tile.Flags.Open) != 0)
+                                items.Add("open door");
+                            else
+                                items.Add("closed door");
+                        }
+
+                        if (t.unit != null)
+                        {
+                            if (t.unit.ai)
+                                items.Add("enemy");
+                            else
+                                items.Add("you");
+                        }
+
+                        if (t.items != null)
+                        {
+                            if (t.items.Count == 1)
+                            {
+                                if (t.items[0].count == 1)
+                                    items.Add(t.items[0].item.name);
+                                else
+                                    items.Add(string.Format("{0} {1}s", t.items[0].count, t.items[0].item.name));
+                            }
+                            else
+                                items.Add("many items");
+                        }
+                    }
+                    else
+                    {
+                        if (t.type == Tile.Type.Door)
+                        {
+                            if ((t.flags & Tile.Flags.LastOpen) != 0)
+                                items.Add("open door");
+                            else
+                                items.Add("closed door");
+                        }
+                    }
+
+                    if (items.Count == 0)
+                        ShowDialog("There is nothing there.");
+                    else
+                    {
+                        StringBuilder s = new StringBuilder("There is ");
+                        s.Join(items);
+                        if (look_pos == player.pos)
+                            s.Append(" here.");
+                        else
+                            s.Append(" there.");
+                        ShowDialog(s.ToString());
+                    }
+                }
+                else
+                    ShowDialog("You don't know what is there.");
+            }
+            else if (k.KeyChar == 'c')
+            {
+                look_pos = player.pos;
+            }
+            else if (k.Key == ConsoleKey.Escape)
+            {
+                mode = Mode.Game;
+            }
+            else
+                return blink;
 
             return true;
+        }
+
+        bool UpdatePickDir(float dt)
+        {
+            ConsoleKeyInfo k = Console.ReadKey();
+            Dir dir = Dir.None;
+
+            if(GetDir(k.Key, out dir))
+            {
+                Tile t = map.GetTileSafe(player.pos + dirs[(int)dir].change);
+                bool ok = true;
+                if (t.type != Tile.Type.Door)
+                    ok = false;
+                else
+                {
+                    if(mode == Mode.OpenDoor)
+                    {
+                        if ((t.flags & Tile.Flags.Open) == 0)
+                        {
+                            // door is closed, open it
+                            t.flags |= Tile.Flags.Open;
+                            map.CalculateFov(player.pos, RADIUS);
+                            player_acted = true;
+                            mode = Mode.Game;
+                            AddText("You opened door.");
+                            return true;
+                        }
+                        else
+                            ok = false;
+                    }
+                    else
+                    {
+                        if ((t.flags & Tile.Flags.Open) != 0)
+                        {
+                            // door is open, close it
+                            t.flags &= ~Tile.Flags.Open;
+                            map.CalculateFov(player.pos, RADIUS);
+                            player_acted = true;
+                            mode = Mode.Game;
+                            AddText("You closed door.");
+                            return true;
+                        }
+                        else
+                            ok = false;
+                    }
+                }
+
+                if (!ok)
+                    ShowDialog(string.Format("There is no door there to {0}.", mode == Mode.OpenDoor ? "open" : "close"));
+            }
+            else if(k.KeyChar == '?')
+            {
+                ShowDialog(string.Format("Press direction key to {0} door.\nEscape to cancel action.",
+                    mode == Mode.OpenDoor ? "open" : "close"));
+                return true;
+            }
+            else if(k.Key == ConsoleKey.Escape)
+            {
+                mode = Mode.Game;
+                return true;
+            }
+
+            return false;
         }
 
         public void Draw()
         {
             Console.Clear();
 
+            if(mode == Mode.Invalid)
+            {
+                if(have_dialog)
+                    DrawDialog();
+
+                Console.Draw();
+                return;
+            }
+
             Pos my_pos = ((mode == Mode.Look || mode == Mode.Throw) ? look_pos : player.pos);
             Pos offset = new Pos(my_pos.x - screen_size.x / 2, my_pos.y - screen_size.y / 2);
             offset.y -= 1;
 
             short bkg = (((short)ConsoleColor.DarkGray) << 4) | ((short)ConsoleColor.Black);
-            string text = string.Format("Tomashu L:1 XP:0% HP:{0}/{1} W:{2} A:{3}",
+            string text = string.Format("{4} L:1 XP:0% HP:{0}/{1} W:{2} A:{3}",
                 player.hp,
                 player.hpmax,
                 player.weapon != null ? player.weapon.name : "fists",
-                player.armor != null ? player.armor.name : "clothes"); 
+                player.armor != null ? player.armor.name : "clothes",
+                player_name); 
 
             // gui
             for (int i = 0; i < Console.Width; ++i)
@@ -1105,6 +1314,12 @@ namespace hunters
                     int off = my_pos.x - offset.x + (my_pos.y - offset.y) * Console.Width;
                     Console.buf[off].Attributes = (short)~Console.buf[off].Attributes;
                 }
+            }
+            else if(mode == Mode.OpenDoor || mode == Mode.CloseDoor)
+            {
+                string text2 = (mode == Mode.OpenDoor ? "Select door to open" : "Select door to close");
+                Console.WriteText(text2, new Pos((Console.Width - text2.Length) / 2, Console.Height - 1),
+                        Console.MakeColor(ConsoleColor.Black, ConsoleColor.White));
             }
 
             if(mode == Mode.Inventory)
@@ -1434,6 +1649,126 @@ namespace hunters
                 bool result = false;
                 while(!result)
                     result = Update();
+            }
+        }
+
+        void Log(string s)
+        {
+            log.WriteLine("{0}. {1}", DateTime.Now.ToString("HH:mm:ss"), s);
+            log.Flush();
+        }
+
+        void Log(string s, params string[] ss)
+        {
+            Log(string.Format(s, ss));
+        }
+
+        void SaveGame()
+        {
+            string filename = string.Format("{0}.sav", player_name);
+
+            try
+            {
+                using(BinaryWriter f = new BinaryWriter(File.Open(filename, FileMode.Create)))
+                {
+                    // header
+                    f.Write('H');
+                    f.Write('U');
+                    f.Write('N');
+                    f.Write((byte)0);
+
+                    // set units ids
+                    int id = 0;
+                    foreach (Unit u in units)
+                    {
+                        u.id = id;
+                        ++id;
+                    }
+
+                    // game vars
+                    Utils.rnd.Save(f);
+                    f.Write(player_name);
+                    f.Write(player.id);
+
+                    // units
+                    f.Write(units.Count);
+                    foreach(Unit u in units)
+                        u.Save(f);
+
+                    // map
+                    map.Save(f);
+                }
+            }
+            catch(Exception e)
+            {
+                Log("Failed to save game to file {0}: {1}", filename, e.ToString());
+                ShowDialog("Failed to save game.\nCheck log file for details.");
+            }
+
+            Log("Game saved to {0}. Closing...", filename);
+            Environment.Exit(0);
+        }
+
+        bool TryLoad()
+        {
+            string filename = string.Format("{0}.sav", player_name);
+
+            if(!File.Exists(filename))
+                return false;
+
+            try
+            {
+                using(BinaryReader f = new BinaryReader(File.Open(filename, FileMode.Open)))
+                {
+                    // header
+                    char[] sign = new char[3];
+                    f.Read(sign, 0, 3);
+                    if (sign[0] != 'H' || sign[1] != 'U' || sign[2] != 'N')
+                        throw new Exception(string.Format("Invalid file signature '{0}{1}{2}'.", sign[0], sign[1], sign[2]));
+                    byte ver;
+                    f.Read(out ver);
+                    if (ver != 0)
+                        throw new Exception(string.Format("Invalid file version '{0}'.", ver));
+
+                    // game vars
+                    Utils.rnd.Load(f);
+                    player_name = f.ReadString();
+                    int player_id = f.ReadInt32();
+
+                    // units
+                    int count = f.ReadInt32();
+                    units.Clear();
+                    for(int i=0; i<count; ++i)
+                    {
+                        Unit u = new Unit();
+                        u.Load(f);
+                        units.Add(u);
+                    }
+                    Unit.units = units;
+
+                    // map
+                    map.Load(f);
+
+                    if (player_id < 0 || player_id >= units.Count || units[player_id].ai)
+                        throw new Exception(string.Format("Invalid player id '{0}'.", player_id));
+
+                    player = units[player_id];
+                    throw_prev = null;
+                    throw_target = null;
+                    mode = Mode.Game;
+                    return true;
+                }
+            }
+            catch(Exception e)
+            {
+                Log("Failed to load game from file {0}: {1}", filename, e.ToString());
+                mode = Mode.Invalid;
+                ShowDialogAction("Failed to load game.\nCheck log file for details.", () => Environment.Exit(1));
+                while(true)
+                {
+                    Draw();
+                    UpdateDialog();
+                }
             }
         }
     }

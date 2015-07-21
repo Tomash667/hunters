@@ -91,6 +91,7 @@ namespace hunters
         private static Coord buf_pos;
         private static float timer;
         private static double freq;
+        static int cx, cy;
 
         public static CharInfo[] buf;
 
@@ -152,6 +153,9 @@ namespace hunters
                 buf[i].Char.AsciiChar = (byte)' ';
                 buf[i].Attributes = (short)ConsoleColor.Gray;
             }
+
+            cx = 0;
+            cy = 0;
         }
 
         public static void Draw()
@@ -197,8 +201,21 @@ namespace hunters
 
         public static void WriteText(string text, Pos pos)
         {
-            for (int x = 0; x < text.Length; ++x)
-                Console.buf[x + pos.x + pos.y * Console.Width].Char.UnicodeChar = text[x];
+            int x = pos.x;
+            int y = pos.y;
+            for (int i = 0; i < text.Length; ++i)
+            {
+                if (text[i] == '\n')
+                {
+                    x = pos.x;
+                    ++y;
+                }
+                else if(text[i] != '\r')
+                {
+                    Console.buf[x + y * Console.Width].Char.UnicodeChar = text[i];
+                    ++x;
+                }
+            }
         }
 
         public static void WriteText(string text, Pos pos, short color)
@@ -210,6 +227,79 @@ namespace hunters
         public static short MakeColor(ConsoleColor front, ConsoleColor back)
         {
             return (short)(((int)front) | (((int)back) << 4));
+        }
+
+        public static void WriteText2(string text)
+        {
+            for (int i = 0; i < text.Length; ++i)
+            {
+                if (text[i] == '\n')
+                {
+                    cx = 0;
+                    ++cy;
+                }
+                else if (text[i] != '\r')
+                {
+                    Console.buf[cx + cy * Console.Width].Char.UnicodeChar = text[i];
+                    ++cx;
+                }
+            }
+        }
+
+        public static string GetText()
+        {
+            int curx = cx;
+            int cury = cy;
+            StringBuilder input = new StringBuilder();
+            System.Console.CursorLeft = curx;
+            System.Console.CursorTop = cury;
+            System.Console.CursorVisible = true;
+
+            Draw();
+
+            while (true)
+            {
+                ConsoleKeyInfo k = ReadKey();
+                if ((k.KeyChar >= 'a' && k.KeyChar <= 'z')
+                    || (k.KeyChar >= 'A' && k.KeyChar <= 'Z')
+                    || (k.KeyChar >= '0' && k.KeyChar <= '9')
+                    || k.KeyChar == ' ')
+                {
+                    if (input.Length < 20)
+                    {
+                        input.Append(k.KeyChar);
+                        buf[curx + cury * w].Char.UnicodeChar = k.KeyChar;
+                        ++curx;
+                        System.Console.CursorLeft = curx;
+                        Draw();
+                    }
+                }
+                else if(k.Key == ConsoleKey.Backspace)
+                {
+                    if(input.Length > 0)
+                    {
+                        input.Length = input.Length - 1;
+                        --curx;
+                        buf[curx + cury * w].Char.UnicodeChar = ' ';
+                        System.Console.CursorLeft = curx;
+                        Draw();
+                    }
+                }
+                else if(k.Key == ConsoleKey.Enter)
+                {
+                    string s = input.ToString().Trim();
+                    if (s.Length > 0)
+                    {
+                        System.Console.CursorVisible = false;
+                        return s;
+                    }
+                }
+                else if(k.Key == ConsoleKey.Escape)
+                {
+                    System.Console.CursorVisible = false;
+                    return null;
+                }
+            }
         }
     }
 }

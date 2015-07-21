@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -31,7 +32,7 @@ namespace hunters
 
         public Tile()
         {
-            int c = Utils.r.Next(100);
+            int c = Utils.Random(100);
             if (c < 70)
                 type = Type.Empty;
             else if (c < 90)
@@ -92,6 +93,35 @@ namespace hunters
         public void AddItem(Item item, int count)
         {
             ItemSlot.AddItem(new ItemSlot(item, count), items);
+        }
+
+        public bool CanMove()
+        {
+            if (type == Type.Empty)
+                return true;
+            else if (type == Type.Door)
+                return (flags & Flags.Open) != 0;
+            else
+                return false;
+        }
+
+        public void Save(BinaryWriter f)
+        {
+            f.Write(unit);
+            f.Write(items);
+            f.Write((byte)type);
+            f.Write((byte)flags);
+        }
+
+        public void Load(BinaryReader f)
+        {
+            f.Read(out unit);
+            f.Read(out items);
+            byte b;
+            f.Read(out b);
+            type = (Type)b;
+            f.Read(out b);
+            flags = (Flags)b;
         }
     }
 }

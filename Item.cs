@@ -23,7 +23,7 @@ namespace hunters
         }*/
 
         public Type type;
-        public string name;
+        public string id, name;
         public int value;
         //public int subtype;
 
@@ -64,11 +64,21 @@ namespace hunters
         }
 
         public static Item[] items = new Item[] {
-            new Item {name = "knife", type = Type.Weapon, value = 2},
-            new Item {name = "leather jacket", type = Type.Armor, value = 1},
-            new Item {name = "potion", type = Type.Potion},
-            new Item {name = "stuff", type = Type.Other}
+            new Item {id = "knife", name = "knife", type = Type.Weapon, value = 2},
+            new Item {id = "ljacket", name = "leather jacket", type = Type.Armor, value = 1},
+            new Item {id = "potion", name = "potion", type = Type.Potion},
+            new Item {id = "stuff", name = "stuff", type = Type.Other}
         };
+
+        public static Item Find(string id)
+        {
+            foreach(Item item in items)
+            {
+                if (item.id == id)
+                    return item;
+            }
+            return null;
+        }
     }
 
     class ItemSlot

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,7 +13,7 @@ namespace hunters
         public const int INDEX_ARMOR = -2;
 
         public Pos pos;
-        public int hp, hpmax;
+        public int hp, hpmax, id;
         public bool ai;
         public Item weapon, armor;
         public List<ItemSlot> items;
@@ -101,5 +102,31 @@ namespace hunters
                     break;
             }
         }
+
+        public void Save(BinaryWriter f)
+        {
+            f.Write(id);
+            f.Write(pos);
+            f.Write(hp);
+            f.Write(hpmax);
+            f.Write(ai);
+            f.Write(weapon);
+            f.Write(armor);
+            f.Write(items);
+        }
+
+        public void Load(BinaryReader f)
+        {
+            f.Read(out id);
+            f.Read(out pos);
+            f.Read(out hp);
+            f.Read(out hpmax);
+            f.Read(out ai);
+            f.Read(out weapon);
+            f.Read(out armor);
+            f.Read(out items);
+        }
+
+        public static List<Unit> units;
     }
 }

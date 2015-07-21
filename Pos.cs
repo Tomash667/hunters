@@ -36,6 +36,16 @@ namespace hunters
             return new Pos(a.x * v, a.y * v);
         }
 
+        public static bool operator == (Pos a, Pos b)
+        {
+            return a.x == b.x && a.y == b.y;
+        }
+
+        public static bool operator != (Pos a, Pos b)
+        {
+            return a.x != b.x || a.y != b.y;
+        }
+
         public int Distance(Pos a)
         {
             return Math.Max(Math.Abs(x - a.x), Math.Abs(y - a.y));

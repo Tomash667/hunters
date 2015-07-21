@@ -1,6 +1,6 @@
-﻿+ open doors by walking
-+ opened doors don't block los
-+ open / close command
+﻿+ config with keys
++ readme
++ loading level from file
 
 + better colors for visited tiles
 + t - throw
@@ -23,9 +23,6 @@
 + save/load
 + stats screen
 + don't update screen on invalid key
-+ fog of war
-+ look distance
-+ look at tile
 + look at item
 + blood animation
 + missing, projecticle hitting other targets
@@ -37,6 +34,9 @@
 + locked chests
 + known items on ground/doors history
 - better handling of pressed button
++ delete save after load
++ wizard mage (save without quit, load without delete)
++ open door, Open dir, close, Close dir
 
 http://www.roguebasin.com/index.php?title=Articles
 http://www.roguebasin.com/index.php?title=How_to_Write_a_Roguelike_in_15_Steps
