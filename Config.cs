@@ -36,7 +36,7 @@ namespace hunters
             }
         }
 
-        List<Section> sections;
+        List<Section> sections = new List<Section>();
 
         public Section this[string name]
         {
@@ -69,22 +69,24 @@ namespace hunters
                     if(t.IsSymbol('['))
                     {
                         t.Next();
-                        section = this[t.MustGetItem()];
+                        section = this[t.GetItem()];
                         t.Next();
                         t.AssertSymbol(']');
                     }
                     else
                     {
-                        string key = t.MustGetItem();
+                        string key = t.GetItem();
                         t.Next();
-                        string value = t.GetLineItem();
+                        t.AssertSymbol('=');
+                        t.NextLine();
+                        string value = t.GetItem();
                         section[key] = value;
                     }
                 }
             }
             catch(Exception e)
             {
-                
+                string err = e.ToString();
             }
         }
     }

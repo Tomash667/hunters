@@ -1,0 +1,102 @@
+//==============================================================================
+// Melee weapons
+weapon knife {
+	name "knife"
+	desc "Normal steel knife."
+	subtype pierce
+	attack 2
+	material steel
+	value 10
+	weight 0.25
+}
+
+weapon baseball_bat {
+	name "baseball bat"
+	desc "Normal baseball bat."
+	subtype blunt
+	attack 3
+	material wood
+	value 15
+	weight 1.5
+}
+
+weapon machete {
+	name "machete"
+	desc "Normal steel machete."
+	subtype slash
+	attack 4
+	material steel
+	value 30
+	weight 1
+}
+
+weapon wrench {
+	name "wrench"
+	desc "Metal wrench."
+	subtype blunt
+	attack 4
+	material iron
+	value 25
+	weight 2
+}
+
+weapon silver_knife {
+	name "silver knife"
+	desc "Knife made from silver alloy."
+	subtype pierce
+	attack 2
+	material silver
+	value 50
+	weight 0.25
+}
+
+//==============================================================================
+// Guns
+gun pistol {
+	name "pistol"
+	desc "Normal pistol for 9mm bullets, has 10 capacity."
+	attack 10
+	capacity 10
+	range 8
+	subtype bullet9mm
+	value 300
+	weight 0.5
+}
+
+//==============================================================================
+// Armor
+armor ljacket {
+	name "leather jacket"
+	desc "Normal leather jacket."
+	defense 1
+	value 50
+	weight 1.5
+}
+
+//==============================================================================
+// Potions
+potion hp {
+	name "healing potion"
+	desc "Magical healing potion, heals 5 hp."
+	value 40
+	weight 0.1
+}
+
+//==============================================================================
+// Ammo
+ammo ammo9mm {
+	name "9mm bullet"
+	desc "Standard 9mm bullets for pistol."
+	subtype bullet9mm
+	value 2
+	weight 0.01
+}
+
+//==============================================================================
+// Other
+other stuff {
+	name "stuff"
+	desc "Stufy stuff."
+	value 1
+	weight 1
+}

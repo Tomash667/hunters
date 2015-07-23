@@ -154,10 +154,33 @@ namespace hunters
             }
         }
 
-        public static string Unescape(string str, int pos, int pos2)
+        public static string Unescape(string str, int pos, int size)
         {
-            // !!!!!!!!!!!!!
-            return "";
+            StringBuilder s = new StringBuilder(str.Length);
+
+            const string unesc = "nt\\\"";
+            const string esc = "\n\t\\\"";
+            int end = pos + size;
+
+            for (; pos < end; ++pos)
+            {
+                if (str[pos] == '\\')
+                {
+                    ++pos;
+                    if (pos == size)
+                        throw new Exception(string.Format("Unescape error in string \"{0}\", character '\\' at end of string.", str));
+                    int index = unesc.IndexOf(str[pos]);
+                    if (index != -1)
+                        s.Append(esc[index]);
+                    else
+                        throw new Exception(string.Format("Unescape error in string \"{0}\", unknown escape sequence '\\{1}'.",
+                            str, str[pos]));
+                }
+                else
+                    s.Append(str[pos]);
+            }
+
+            return s.ToString();
         }
 
         public enum StringToNumberResult
@@ -169,57 +192,27 @@ namespace hunters
 
         public static StringToNumberResult StringToNumber(string str, out long i, out float f)
         {
-            /*
-             * i = 0;
-            f = 0;
-            uint diver = 10;
-            uint digits = 0;
-            char c;
-            var it = str.GetEnumerator();
-            bool sign = false;
-            if (it.Current == '-')
-            {
-                sign = true;
-                it.MoveNext();
-            }
-
-            do
-            {
-                c = it.Current;
-                if (c == '.')
-                {
-                    it.MoveNext();
-                    break;
-                }
-                else if (c >= '0' && c <= '9')
-                {
-                    i *= 10;
-                    i += (int)c - '0';
-                }
-                else
-                    return StringToNumberResult.Broken;
-            }
-            while (it.MoveNext());
-             * */
             i = 0;
             f = 0;
             uint diver = 10;
             uint digits = 0;
-            char c;
+            char c = (char)0;
             bool sign = false;
-            if (*s == '-')
+            int index = 0;
+
+            if (str[index] == '-')
             {
                 sign = true;
-                ++s;
+                ++index;
             }
 
-            while ((c = *s) != 0)
+            while(index < str.Length)
             {
+                c = str[index];
+                ++index;
+
                 if (c == '.')
-                {
-                    ++s;
                     break;
-                }
                 else if (c >= '0' && c <= '9')
                 {
                     i *= 10;
@@ -227,7 +220,8 @@ namespace hunters
                 }
                 else
                     return StringToNumberResult.Broken;
-                ++s;
+                if (index == str.Length)
+                    c = (char)0;
             }
 
             if (c == 0)
@@ -238,8 +232,11 @@ namespace hunters
                 return StringToNumberResult.Int;
             }
 
-            while ((c = *s) != 0)
+            while (index < str.Length)
             {
+                c = str[index];
+                ++index;
+
                 if (c == 'f')
                 {
                     if (digits == 0)
@@ -254,8 +251,8 @@ namespace hunters
                 }
                 else
                     return StringToNumberResult.Broken;
-                ++s;
             }
+
             f += (float)i;
             if (sign)
             {

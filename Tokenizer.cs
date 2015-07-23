@@ -19,7 +19,12 @@ namespace hunters
             Float,
             String,
             Eof,
-            Eol
+            Eol,
+
+            // special
+            Number,
+            KeywordGroup,
+            KeywordGroupType
         }
         
         [Flags]
@@ -30,13 +35,23 @@ namespace hunters
             Unescape = 1<<2
         }
 
+        class Keyword
+        {
+            public string name;
+            public int id, group;
+        }
+
         const int NPOS = -1;
 
         Flags flags;
         Token token;
         string str, item;
         char symbol;
-        int pos, line, charpos;
+        int pos, line, charpos, _int;
+        float _float;
+        uint _uint;
+        Dictionary<string, Keyword> keywords = new Dictionary<string, Keyword>();
+        Keyword keyword;
 
         public Tokenizer(Flags _flags = Flags.Unescape)
         {
@@ -63,6 +78,7 @@ namespace hunters
 
         public bool Next(bool return_eol=false)
         {
+            redo:
             if(IsEof())
                 return false;
 
@@ -156,57 +172,53 @@ namespace hunters
 
 		        // find next character
 		        pos2 = FindFirstNotOf(return_eol ? " \t" : " \t\n\r", pos);
-		        if(pos2 == NPOS)
-		        {
-			        // only whitespaces, end of file after minus
+                if (pos2 == NPOS)
+                {
+                    // only whitespaces, end of file after minus
                     token = Token.Symbol;
                     symbol = '-';
                     item = "-";
-			        return true;
-		        }
+                }
+                else
+                {
+                    c = str[pos2];
+                    if (c >= '0' && c <= '9')
+                    {
+                        // negative number
+                        pos = FindFirstOf(" \t\n\r,/;'\\[]`<>?:|{}=~!@#$%^&*()+-\"", pos2);
+                        if (pos2 == NPOS)
+                        {
+                            pos = str.Length;
+                            item = str.Substring(pos2);
+                        }
+                        else
+                            item = str.Substring(pos2, pos - pos2);
 
-		        c = str[pos2];
-		        if(c >= '0' && c <= '9')
-		        {
-			        // negative number
-			        pos = FindFirstOf(" \t\n\r,/;'\\[]`<>?:|{}=~!@#$%^&*()+-\"", pos2);
-			        if(pos2 == NPOS)
-			        {
-				        pos = str.Length;
-				        item = str.Substring(pos2);
-			        }
-			        else
-				        item = str.Substring(pos2, pos-pos2);
-
-			        long val;
-                    float valf;
-
-                    Utils.StringToNumberResult result = Utils.StringToNumber(item, out val, out valf);
-			        int co = StringToNumber(token.c_str(), val, _float);
-			        _int = -(int)val;
-			        _uint = 0;
-			        _float = -_float;
-			        if(val > UINT_MAX)
-				        WARN(Format("Tokenizer: Too big number %I64, stored as int(%d) and uint(%u).", val, _int, _uint));
-			        if(co == 2)
-				        type = T_FLOAT;
-			        else if(co == 1)
-				        type = T_INT;
-			        else
-				        type = T_ITEM;
-			        return true;
-		        }
-		        else
-		        {
-                    // not a number, minus
-                    token = Token.Symbol;
-                    symbol = '-';
-                    item = "-";
-			        pos = old_pos;
-			        charpos = old_charpos;
-			        line = old_line;
-			        return true;
-		        }
+                        long val;
+                        Utils.StringToNumberResult result = Utils.StringToNumber(item, out val, out _float);
+                        _int = -(int)val;
+                        _uint = 0;
+                        _float = -_float;
+                        if (-val < int.MinValue)
+                            throw new Exception(string.Format("Too big number {0} to store as int.", val));
+                        if (result == Utils.StringToNumberResult.Float)
+                            token = Token.Float;
+                        else if (result == Utils.StringToNumberResult.Int)
+                            token = Token.Int;
+                        else
+                            token = Token.Item;
+                    }
+                    else
+                    {
+                        // not a number, minus
+                        token = Token.Symbol;
+                        symbol = '-';
+                        item = "-";
+                        pos = old_pos;
+                        charpos = old_charpos;
+                        line = old_line;
+                    }
+                }
 	        }
 	        else if(symbols.IndexOf(c) != -1)
 	        {
@@ -219,109 +231,376 @@ namespace hunters
 	        }
 	        else
 	        {
-		        // coś znaleziono, znajdź koniec tego czegość
+		        // find end of item
 		        bool ignore_dot = false;
-		        if((c >= '0' && c <= '9') || IS_SET(flags, F_JOIN_DOT))
+		        if((c >= '0' && c <= '9') || (flags & Flags.JoinDot) != 0)
 			        ignore_dot = true;
 		        pos = FindFirstOf(ignore_dot ? " \t\n\r,/;'\\[]`<>?:|{}=~!@#$%^&*()+-\"" : " \t\n\r,/;'\\[]`<>?:|{}=~!@#$%^&*()+-\".", pos2);
-		        if(pos2 == string::npos)
+		        if(pos2 == NPOS)
 		        {
-			        pos = str->length();
-			        token = str->substr(pos2);
+                    pos = str.Length;
+			        item = str.Substring(pos2);
 		        }
 		        else
-			        token = str->substr(pos2, pos-pos2);
+			        item = str.Substring(pos2, pos-pos2);
 
-		        // czy to liczba?
+		        // is that number
 		        if(c >= '0' && c <= '9')
 		        {
-			        __int64 val;
-			        int co = StringToNumber(token.c_str(), val, _float);
-			        _int = (int)val;
-			        _uint = (uint)val;
-			        if(val > UINT_MAX)
-				        WARN(Format("Tokenizer: Too big number %I64, stored as int(%d) and uint(%u).", val, _int, _uint));
-			        if(co == 2)
-				        type = T_FLOAT;
-			        else if(co == 1)
-				        type = T_INT;
-			        else
-				        type = T_ITEM;
+			        long val;
+                    Utils.StringToNumberResult result = Utils.StringToNumber(item, out val, out _float);
+                    _int = (int)val;
+                    _uint = (uint)val;
+                    if (val > uint.MaxValue)
+                        throw new Exception(string.Format("Too big number {0} to store as uint.", val));
+
+                    if (result == Utils.StringToNumberResult.Float)
+                        token = Token.Float;
+                    else if (result == Utils.StringToNumberResult.Int)
+                        token = Token.Int;
+                    else
+                        token = Token.Item;
 		        }
 		        else
 		        {
-			        // czy to słowo kluczowe
-			        for(uint i=0; i<keywords.size(); ++i)
-			        {
-				        if(token == keywords[i].name)
-				        {
-					        type = T_KEYWORD;
-					        _int = i;
-					        return true;
-				        }
-			        }
-
-			        // zwykły tekst
-			        type = T_ITEM;
+                    // keyword or item
+                    if(keywords.TryGetValue(item, out keyword))
+                        token = Token.Keyword;
+                    else
+                        token = Token.Item;
 		        }
 	        }
 
 	        return true;
         }
 
-        public string GetLineItem()
+        public bool NextLine()
         {
-            return "";
+            if(IsEof())
+		        return false;
+
+	        if(pos >= str.Length)
+	        {
+                token = Token.Eof;
+		        return false;
+	        }
+
+	        int pos2 = FindFirstOf("\n\r", pos);
+	        if(pos2 == NPOS)
+		        item = str.Substring(pos);
+	        else
+		        item = str.Substring(pos, pos2-pos);
+	
+	        token = Token.Item;
+            pos = pos2;
+            return item.Length > 0;
+        }
+
+        public void SkipTo(Token _token, object what, object what2)
+        {
+            do
+            {
+                if(token == _token)
+                {
+                    if(what == null)
+                        return;
+                    switch(token)
+                    {
+                        case Token.None:
+                        case Token.Eof:
+                        case Token.Eol:
+                            return;
+                        case Token.Item:
+                        case Token.String:
+                            if(item == (string)what)
+                                return;
+                            break;
+                        case Token.Keyword:
+                            if(what2 == null)
+                            {
+                                // keyword with id
+                                if(keyword.id == (int)what)
+                                    return;
+                            }
+                            else
+                            {
+                                // keyword with id/group
+                                if(keyword.id == (int)what && keyword.group == (int)what2)
+                                    return;
+                            }
+                            break;
+                        case Token.Symbol:
+                            if(symbol == (char)what)
+                                return;
+                            break;
+                        case Token.Int:
+                            if(_int == (int)what)
+                                return;
+                            break;
+                        case Token.Float:
+                            if(_float == (float)what)
+                                return;
+                            break;
+                    }
+                }
+                else if(_token >= Token.Number)
+                {
+                    switch(_token)
+                    {
+                        case Token.Number:
+                            if(token == Token.Int || token == Token.Float)
+                            {
+                                if (what == null)
+                                    return;
+                                else if(what is int)
+                                {
+                                     if (_int == (int)what)
+                                         return;
+                                }
+                                else
+                                {
+                                    if (_float == (float)what)
+                                        return;
+                                }
+                            }
+                            break;
+                        case Token.KeywordGroup:
+                            if(token == Token.Keyword)
+                            {
+                                if (keyword.group == (int)what)
+                                    return;
+                            }
+                            break;
+                        case Token.KeywordGroupType:
+                            if(token == Token.Keyword)
+                            {
+                                int _group = ((Type)what).GetHashCode();
+                                if (keyword.group == _group)
+                                    return;
+                            }
+                            break;
+                    }
+                }
+            }
+            while (Next());
         }
 
         int FindFirstOf(string match, int start)
         {
-            return 0;
+            char c;
+
+	        for(int i=start, end = str.Length; i<end; ++i)
+	        {
+		        c = str[i];
+
+		        for(int j=0; j<match.Length; ++j)
+		        {
+			        if(c == match[j])
+				        return i;
+		        }
+
+		        if(c == '\n')
+		        {
+			        ++line;
+			        charpos = 0;
+		        }
+		        else
+			        ++charpos;
+	        }
+
+	        return NPOS;
         }
 
         int FindFirstNotOf(string match, int start)
         {
-            return 0;
+	        char c;
+	        bool found;
+
+	        for(int i=start, end = str.Length; i<end; ++i)
+	        {
+                c = str[i];
+		        found = false;
+
+		        for(int j=0; j<match.Length; ++j)
+		        {
+			        if(c == match[j])
+			        {
+				        found = true;
+				        break;
+			        }
+		        }
+
+		        if(!found)
+			        return i;
+
+		        if(c == '\n')
+		        {
+			        ++line;
+			        charpos = 0;
+		        }
+		        else
+			        ++charpos;
+	        }
+
+	        return NPOS;
         }
 
         int FindFirstOfStr(string match, int start)
         {
-            return 0;
+	        for(int i=start, end = str.Length; i<end; ++i)
+	        {
+		        char c = str[i];
+		        if(c == match[0])
+		        {
+                    bool ok = true;
+                    for(int j=0; j<match.Length; ++j)
+                    {
+                        ++charpos;
+                        ++i;
+                        if (i == end)
+                            return NPOS;
+                        if(match[j] != str[i])
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (ok)
+                        return i;
+		        }
+		        else if(c == '\n')
+		        {
+			        ++line;
+			        charpos = 0;
+		        }
+		        else
+			        ++charpos;
+	        }
+
+	        return NPOS;
         }
 
         int FindEndOfQuote(int start)
         {
-            return 0;
+	        for(int i=start, end = str.Length; i<end; ++i)
+	        {
+		        char c = str[i];
+
+		        if(c == '"')
+		        {
+			        if(i == start || str[i-1] != '\\')
+				        return i;
+		        }
+		        else if(c == '\n')
+		        {
+			        ++line;
+			        charpos = 0;
+		        }
+		        else
+			        ++charpos;
+	        }
+
+	        return NPOS;
+        }
+
+        public static string TokenName(Token token)
+        {
+            switch(token)
+            {
+                case Token.None:
+                    return "none";
+                case Token.Item:
+                    return "item";
+                case Token.Keyword:
+                    return "keyword";
+                case Token.Symbol:
+                    return "symbol";
+                case Token.Int:
+                    return "int";
+                case Token.Float:
+                    return "float";
+                case Token.String:
+                    return "string";
+                case Token.Eof:
+                    return "end of file";
+                case Token.Eol:
+                    return "end of line";
+                default:
+                    return "unknown";
+            }
         }
 
         public string GetCurrent()
         {
             switch(token)
             {
+                case Token.None:
+                    return "none";
+                case Token.Item:
+                    return string.Format("item \"{0}\"", item);
+                case Token.Keyword:
+                    return string.Format("keyword \"{0}\" ({1}, {2})", item, keyword.id, keyword.group);
                 case Token.Symbol:
                     return string.Format("symbol '{0}'", symbol);
+                case Token.Int:
+                    return string.Format("int {0}", _int);
+                case Token.Float:
+                    return string.Format("float {0}", _float);
+                case Token.String:
+                    return string.Format("string \"{0}\"", item);
+                case Token.Eof:
+                    return "end of file";
+                case Token.Eol:
+                    return "end of line";
                 default:
                     return "unknown";
             }
         }
 
-        public string FormatExpected(Token _token, int what)
+        public string FormatExpected(Token _token, object what)
         {
             switch(_token)
             {
                 case Token.Symbol:
-                    if (what != 0)
-                        return string.Format("symbol '{0}'", (char)what);
-                    else
-                        return "symbol";
+                    return string.Format("symbol '{0}'", (char)what);
+                case Token.KeywordGroup:
+                    return string.Format("keyword group {0}", (int)what);
+                case Token.KeywordGroupType:
+                    return string.Format("keyword group '{0}'", ((Type)what).ToString());
                 default:
-                    return "unknown";
+                    return TokenName(_token);
             }
         }
 
-        public void Unexpected(Token _token, int what=0)
+        public void Unexpected(Token _token)
         {
-            throw new Exception(string.Format("Unexpected {0}, expecting {1}.", GetCurrent(), FormatExpected(_token, what)));
+            throw new Exception(string.Format("({0},{1}) Unexpected {2}, expecting {3}.", line+1, charpos+1, GetCurrent(),
+                TokenName(_token)));
+        }
+
+        public void Unexpected(Token _token, object what)
+        {
+            throw new Exception(string.Format("({0},{1}) Unexpected {2}, expecting {3}.", line+1, charpos+1, GetCurrent(),
+                FormatExpected(_token, what)));
+        }
+
+        //=======================================================================================================================
+        public void AddKeyword(string name, int id, int group=-1)
+        {
+            Keyword k = new Keyword
+            {
+                name = name,
+                id = id,
+                group = group
+            };
+            keywords[name] = k;
+        }
+
+        public void AddKeywords<T>(TupleList<string,T> list) where T : struct, IConvertible
+        {
+            int group = typeof(T).GetHashCode();
+            foreach(var item in list)
+                AddKeyword(item.Item1, Convert.ToInt32(item.Item2), group);
         }
 
         //=======================================================================================================================
@@ -345,12 +624,58 @@ namespace hunters
             return IsSymbol() && symbol == c;
         }
 
+        public bool IsKeyword()
+        {
+            return IsToken(Token.Keyword);
+        }
+
+        public bool IsKeyword(int id)
+        {
+            return IsKeyword() && keyword.id == id;
+        }
+
+        public bool IsKeyword(int id, int group)
+        {
+            return IsKeyword() && keyword.id == id && keyword.group == group;
+        }
+
+        public bool IsKeywordGroup(int group)
+        {
+            return IsKeyword() && keyword.group == group;
+        }
+
         public bool IsItem()
         {
             return IsToken(Token.Item);
         }
 
+        public bool IsString()
+        {
+            return IsToken(Token.String);
+        }
+
+        public bool IsInt()
+        {
+            return IsToken(Token.Int);
+        }
+
+        public bool IsFloat()
+        {
+            return IsToken(Token.Float);
+        }
+
+        public bool IsNumber()
+        {
+            return IsInt() || IsFloat();
+        }
+
         //=======================================================================================================================
+        public void AssertSymbol()
+        {
+            if (!IsSymbol())
+                Unexpected(Token.Symbol);
+        }
+
         public void AssertSymbol(char c)
         {
             if (!IsSymbol(c))
@@ -363,11 +688,102 @@ namespace hunters
                 Unexpected(Token.Item);
         }
 
+        public void AssertKeyword()
+        {
+            if (!IsKeyword())
+                Unexpected(Token.Keyword);
+        }
+
+        public void AssertKeywordGroup(int group)
+        {
+            if (!IsKeywordGroup(group))
+                Unexpected(Token.KeywordGroup, group);
+        }
+
+        public void AssertKeywordGroup(Type group_type)
+        {
+            int group = group_type.GetHashCode();
+            if (!IsKeywordGroup(group))
+                Unexpected(Token.KeywordGroupType, group_type);
+        }
+
+        public void AssertString()
+        {
+            if (!IsString())
+                Unexpected(Token.String);
+        }
+
+        public void AssertInt()
+        {
+            if (!IsInt())
+                Unexpected(Token.Int);
+        }
+
+        public void AssertFloat()
+        {
+            if (!IsFloat())
+                Unexpected(Token.Float);
+        }
+
+        public void AssertNumber()
+        {
+            if (!IsNumber())
+                Unexpected(Token.Number);
+        }
+        
         //=======================================================================================================================
-        public string MustGetItem()
+        public string GetItem()
         {
             AssertItem();
             return item;
+        }
+
+        public string GetKeywordName()
+        {
+            AssertKeyword();
+            return keyword.name;
+        }
+
+        public T GetKeyword<T>() where T : struct, IConvertible
+        {
+            AssertKeywordGroup(typeof(T));
+            return (T)(object)keyword.id;
+        }
+
+        public string GetString()
+        {
+            AssertString();
+            return item;
+        }
+
+        public char GetSymbol()
+        {
+            AssertSymbol();
+            return symbol;
+        }
+
+        public int GetInt()
+        {
+            AssertInt();
+            return _int;
+        }
+
+        public float GetFloat()
+        {
+            AssertFloat();
+            return _float;
+        }
+
+        public int GetNumberInt()
+        {
+            AssertNumber();
+            return _int;
+        }
+
+        public float GetNumberFloat()
+        {
+            AssertNumber();
+            return _float;
         }
     }
 }

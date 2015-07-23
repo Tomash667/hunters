@@ -1,4 +1,11 @@
-﻿+ config with keys
+﻿- inventory item names broken
+
++ required item types
++ item desc
++ space toggle between pick/examine (and other)
++ ammo for guns shown
+
++ config with keys
 + readme
 + loading level from file
 

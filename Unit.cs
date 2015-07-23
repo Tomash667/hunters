@@ -15,8 +15,8 @@ namespace hunters
         public Pos pos;
         public int hp, hpmax, id;
         public bool ai;
-        public Item weapon, armor;
-        public List<ItemSlot> items;
+        public GameItem weapon, armor;
+        public List<GameItem> items;
 
         public Unit()
         {
@@ -24,36 +24,33 @@ namespace hunters
             hp = hpmax;
             weapon = null;
             armor = null;
-            items = new List<ItemSlot>();
+            items = new List<GameItem>();
         }
 
-        public void AddItem(ItemSlot slot)
+        public void AddItem(GameItem slot)
         {
-            ItemSlot.AddItem(slot, items);
+            GameItem.AddItem(slot, items);
         }
 
-        public IEnumerable<IndexedItem<ItemSlot>> Items
+        public IEnumerable<IndexedItem<GameItem>> Items
         {
             get
             {
-                foreach (var a in GetEquipped())
-                    yield return new IndexedItem<ItemSlot>(new ItemSlot(a.item, 1), a.index);
-                foreach (var a in items.GetIndexes())
-                    yield return a;
+                return GetEquipped().Concat(items.GetIndexes());
             }
         }
 
-        public IEnumerable<IndexedItem<Item>> GetEquipped()
+        public IEnumerable<IndexedItem<GameItem>> GetEquipped()
         {
             if (weapon != null)
-                yield return new IndexedItem<Item>(weapon, INDEX_WEAPON);
+                yield return new IndexedItem<GameItem>(weapon, INDEX_WEAPON);
             if (armor != null)
-                yield return new IndexedItem<Item>(armor, INDEX_ARMOR);
+                yield return new IndexedItem<GameItem>(armor, INDEX_ARMOR);
         }
 
-        public static int GetIndex(Item item)
+        public static int GetIndex(Item.Type type)
         {
-            switch(item.type)
+            switch(type)
             {
                 case Item.Type.Weapon:
                     return INDEX_WEAPON;
@@ -64,9 +61,9 @@ namespace hunters
             }
         }
 
-        public void Equip(Item item)
+        public void Equip(GameItem item)
         {
-            switch(item.type)
+            switch(item.item.type)
             {
                 case Item.Type.Weapon:
                     weapon = item;
@@ -77,7 +74,7 @@ namespace hunters
             }
         }
 
-        public Item GetEquipped(int index)
+        public GameItem GetEquipped(int index)
         {
             switch(index)
             {

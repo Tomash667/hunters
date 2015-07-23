@@ -26,7 +26,7 @@ namespace hunters
         }
 
         public Unit unit;
-        public List<ItemSlot> items;
+        public List<GameItem> items;
         public Type type;
         public Flags flags;
 
@@ -90,9 +90,9 @@ namespace hunters
                 return '.';
         }
 
-        public void AddItem(Item item, int count)
+        public void AddItem(Item item, int count, int ammo)
         {
-            ItemSlot.AddItem(new ItemSlot(item, count), items);
+            GameItem.AddItem(new GameItem(item, count, ammo), items);
         }
 
         public bool CanMove()

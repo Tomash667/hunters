@@ -50,5 +50,21 @@ namespace hunters
         {
             return Math.Max(Math.Abs(x - a.x), Math.Abs(y - a.y));
         }
+
+        public override bool Equals(object obj)
+        {
+            return obj is Pos && this == (Pos)obj;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + x.GetHashCode();
+                hash = hash * 23 + y.GetHashCode();
+                return hash;
+            }
+        }
     }
 }

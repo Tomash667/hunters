@@ -165,14 +165,25 @@ namespace hunters
                 f.Write((byte)0);
         }
 
-        public static void Write(this BinaryWriter f, List<ItemSlot> items)
+        public static void Write(this BinaryWriter f, GameItem item)
+        {
+            if (item != null && item.item != null)
+            {
+                f.Write(item.item.id);
+                f.Write(item.count);
+            }
+            else
+                f.Write((byte)0);
+        }
+
+        public static void Write(this BinaryWriter f, List<GameItem> items)
         {
             if (items == null || items.Count == 0)
                 f.Write(0);
             else
             {
                 f.Write(items.Count);
-                foreach(ItemSlot slot in items)
+                foreach(GameItem slot in items)
                 {
                     f.Write(slot.item.id);
                     f.Write(slot.count);
@@ -221,7 +232,22 @@ namespace hunters
             }
         }
 
-        public static void Read(this BinaryReader f, out List<ItemSlot> items)
+        public static void Read(this BinaryReader f, out GameItem item)
+        {
+            Item it;
+            f.Read(out it);
+            if(it != null)
+            {
+                int count = f.ReadInt32();
+                if(count < 0)
+                    throw new Exception(string.Format("Item '{0}' have count '{1}'.", it.name, count));
+                item = new GameItem(it, count);
+            }
+            else
+                item = null;
+        }
+
+        public static void Read(this BinaryReader f, out List<GameItem> items)
         {
             int count = f.ReadInt32();
             if (count == 0)
@@ -230,14 +256,14 @@ namespace hunters
             {
                 Item item;
                 int count2;
-                items = new List<ItemSlot>(count);
+                items = new List<GameItem>(count);
                 for(int i=0; i<count; ++i)
                 {
                     f.Read(out item);
                     count2 = f.ReadInt32();
-                    if(count2 < 1)
+                    if(count2 < 0)
                         throw new Exception(string.Format("Item '{0}' have count '{1}'.", item.id, count2));
-                    items.Add(new ItemSlot(item, count2));
+                    items.Add(new GameItem(item, count2));
                 }
             }
         }
@@ -437,6 +463,14 @@ namespace hunters
             first = null;
             last = null;
             count = 0;
+        }
+    }
+
+    public class TupleList<T1, T2> : List<Tuple<T1, T2>>
+    {
+        public void Add(T1 item, T2 item2)
+        {
+            Add(new Tuple<T1, T2>(item, item2));
         }
     }
 }
