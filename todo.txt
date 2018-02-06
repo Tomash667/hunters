@@ -1,4 +1,4 @@
-﻿- inventory item names broken
+﻿- equiping pistol make it dissapear
 
 + required item types
 + item desc

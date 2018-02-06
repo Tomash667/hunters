@@ -545,7 +545,7 @@ namespace hunters
                 }
                 if (inv_item.index < 0)
                     s.Append("*");
-                s.Append(string.Format("{0}. {1}", (char)('a' + (i + offset) % 26), inv_item.game_item.item));
+                s.Append(string.Format("{0}. {1}", (char)('a' + (i + offset) % 26), inv_item.game_item));
                 if (inv_item.game_item.count > 1)
                     s.Append(string.Format(" x{0}", inv_item.game_item.count));
 

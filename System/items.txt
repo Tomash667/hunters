@@ -75,7 +75,7 @@ armor ljacket {
 
 //==============================================================================
 // Potions
-potion hp {
+potion p_hp {
 	name "healing potion"
 	desc "Magical healing potion, heals 5 hp."
 	value 40

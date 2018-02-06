@@ -109,7 +109,7 @@ namespace hunters
             player.armor = new GameItem(Item.Find("ljacket"), 1);
             player.items.Add(new GameItem(Item.Find("pistol"), 1, 10));
             player.items.Add(new GameItem(Item.Find("ammo9mm"), 30));
-            player.items.Add(new GameItem(Item.Find("potion"), 2));
+            player.items.Add(new GameItem(Item.Find("p_hp"), 2));
             player.items.Add(new GameItem(Item.Find("stuff"), 15));
             Tile t = map[player.pos];
             t.unit = player;

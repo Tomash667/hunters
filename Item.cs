@@ -77,7 +77,7 @@ namespace hunters
                 if (item.id == id)
                     return item;
             }
-            return null;
+            throw new Exception(string.Format("Missing item '{0}'.", id));
         }
 
         public static string ToString(WeaponType type)
